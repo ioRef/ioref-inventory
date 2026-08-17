@@ -95,8 +95,8 @@ application change.
 
 **Usernames are eppns, not bare Andrew IDs.** CMU releases
 `user@andrew.cmu.edu`. A bare username is unique only within one institution,
-whereas eppn is unique across the federation — which the deploy-elsewhere goal
-requires — and maps directly onto Entra's UPN when that migration happens.
+whereas eppn is unique across the federation (which the deploy-elsewhere goal
+requires) and maps directly onto Entra's UPN when that migration happens.
 Django's default username validator already permits `@`, so no field override
 is needed. Note that changing this after accounts exist produces a duplicate
 for every user, since `TrustedHeaderBackend` resolves on it.
@@ -107,7 +107,7 @@ for every user, since `TrustedHeaderBackend` resolves on it.
 `subject_id` holds the IdP's permanent identifier (eduPersonUniqueId or the
 SAML persistent NameID) where one is released; it takes precedence over eppn
 when resolving an account, so a rename follows the person and a reissued eppn
-does not inherit the previous holder's history. It is optional — not every
+does not inherit the previous holder's history. It is optional: not every
 deployment's IdP releases one, and resolution falls back to eppn alone.
 `accounts/tests.py` covers both paths.
 
@@ -123,7 +123,7 @@ reintroduces an N+1 query per row.
 
 **`AUTH_MODE=shib` trusts its request headers unconditionally.**
 `accounts/backends.py` accepts whatever `REMOTE_USER_HEADER` contains. This is
-safe only where the upstream proxy overwrites those headers on every request —
+safe only where the upstream proxy overwrites those headers on every request;
 see the `RequestHeader unset` directives in `deploy/apache/inventory.conf`. If
 gunicorn is reachable other than through that virtual host, a client-supplied
 `Remote-User` header constitutes a complete authentication bypass. Under Docker,
@@ -206,11 +206,83 @@ docker compose up --build
 below-minimum part (`0010`), an uncounted part (`0054`), and a discontinued part
 at zero (`0028`). Changes to the stock display should be verified against these.
 
+## Build and release
+
+`.github/workflows/build.yml` runs the tests, then publishes an image to
+`ghcr.io/ioref/ioref-inventory` for podman to pull on prod. Pull requests build
+the image but do not push it, so a broken Dockerfile is caught before merge
+without an unreviewed tag reaching the registry.
+
+**The test job needs no database service and no `.env`.** Every setting in
+`config/settings.py` has a default, `DATABASE_URL` falls back to SQLite, and
+Django builds its own test database in memory. Adding a Postgres service would
+be the right move only if prod moves to Postgres, at which point CI should
+matrix over both. `psycopg2-binary` is already a dependency and
+`compose.yaml` already has the profile, but nothing currently tests that path.
+
+**`provenance` and `sbom` are disabled in the build step, for podman's
+benefit.** buildx attaches attestation manifests by default, which turns a
+single-platform build into a manifest list whose extra entries carry no
+architecture. Podman rejects that with "no image found in manifest list for
+architecture amd64". Re-enable only after confirming prod's podman skips
+unknown entries.
+
+The image name is written out in lowercase rather than taken from
+`github.repository`, because the organisation is spelled `ioRef` and registry
+paths must be lowercase.
+
+`.dockerignore` earns its place: the Dockerfile ends with `COPY . .`, so
+without it a local `docker compose up --build` bakes the developer's
+`data/db.sqlite3` into the image, where the volume mount then shadows it. Real
+stock data in a registry, to no purpose.
+
+## Maintenance
+
+Everything here is pinned on purpose, which means nothing moves unless
+something moves it. `.github/dependabot.yml` is that something: monthly pull
+requests for the Dockerfile's two `FROM` lines, the workflow's actions, and
+`uv.lock`. Patches are grouped; anything larger arrives on its own so it has
+somewhere to argue for itself.
+
+What to check when one lands:
+
+**uv.** Pinned at `0.12.5` in the Dockerfile. The image's uv must be at least
+as new as whatever wrote `uv.lock`, currently `revision = 3`. A newer uv reads
+an older lockfile, but not the reverse, so a developer on a newer uv than the
+image is the failure case. If a bump breaks the build, compare against
+`uv --version` locally before assuming upstream is at fault.
+
+**Base image.** `python:3.13-slim` moves for security fixes without changing
+the tag, so a periodic rebuild matters as much as the version bump does. A
+scheduled build, or just merging the monthly Dependabot pull request, refreshes
+it.
+
+**Django.** 5.2 is an LTS, supported to April 2028. Dependabot is configured
+not to offer the major, because moving off an LTS is a migration rather than a
+dependency bump. Security releases within 5.2 should be taken promptly.
+
+**Unfold.** It owns the admin templates, so it is the upgrade most likely to
+break something visible, and the breakage lands in the admin rather than in a
+test. Check the changelog against `inventory/static/inventory/theme.css`, whose
+`!important` declarations exist to override Unfold's Tailwind utility classes.
+Upgrade it deliberately, and not in the same pull request as a Django upgrade.
+
+Two things Dependabot cannot see:
+
+**The Shibboleth service provider keypair.** It must survive container
+rebuilds, or the metadata registered with the identity provider goes stale and
+logins fail. Certificates expire; the renewal is a coordination with the IdP,
+not a deploy. See the Docker note under "Outstanding work".
+
+**API keys.** `ApiKey.expires_at` is nullable, so a key issued without one
+never expires. Worth reviewing periodically against who still needs a key, and
+the ioref-web key rotated on the same occasion.
+
 ## Outstanding work
 
 **Directus migration.** Not yet written. Before beginning, determine which
 source is authoritative: the schema contains both an `Inventory` collection
-(append-only — `part`, `item_count`, `date_created`, indicating that migration
+(append-only: `part`, `item_count`, `date_created`, indicating that migration
 away from the JSON objects was already underway) and the legacy
 `inventory_history` field on `parts`. This requires checking against production
 data. The migration will also need `directus_files` metadata and the uploads
@@ -220,14 +292,14 @@ into `tools/`.
 
 **Component grouping.** ioref-web groups several stocked parts under one
 component page, so one explanation covers all 33 ceramic capacitors. The
-*explanation* lives there. The *classification* lives here, as `Category` — so
+*explanation* lives there. The *classification* lives here, as `Category`, so
 the frontdoor can propose groupings from `?category=`, and purchasing questions
 like "every capacitor below minimum" can be answered without involving the
 guides site at all.
 
 **Count-entry interface.** The Django admin is functional but does not match the
-operational workflow, which is barcode-driven: scan, enter a quantity, advance —
-a single field, without pointer input. Unfold's keyboard shortcuts (`c` to
+operational workflow, which is barcode-driven: scan, enter a quantity, advance.
+That wants a single field, without pointer input. Unfold's keyboard shortcuts (`c` to
 create, `Ctrl+K` for the command palette, `Shift+?` for the full list) assist
 navigation but not data entry. Access control should be enforced in Django with
 `@login_required` in addition to Apache, so that it is not dependent on
@@ -240,7 +312,7 @@ sets, where a given part appears in many. To be addressed in the frontdoor.
 **LTI integration.** Under consideration for the drawio library or part-sets,
 launched from Canvas. This targets the frontdoor; inventory need only serve the
 API. LTI 1.3 is OIDC-based and launches within an iframe, requiring
-`SameSite=None` cookies — a pattern maker-cards already established for its
+`SameSite=None` cookies, a pattern maker-cards already established for its
 Directus session cookie.
 
 **Shibboleth under Docker.** `mod_shib` is an Apache module requiring `shibd`

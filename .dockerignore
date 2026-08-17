@@ -1,0 +1,27 @@
+# The Dockerfile does `COPY . .`, so anything not excluded here is baked into
+# the published image.
+
+# data/ holds the live SQLite database. Copying it in would ship whatever was
+# on the build machine and then have it shadowed by the volume mount at
+# runtime -- wrong either way, and it puts real stock data in a registry.
+data/
+
+# Built on the host, for the host. The image runs its own `uv sync`.
+.venv/
+
+.env
+.git/
+.github/
+.gitignore
+__pycache__/
+*.py[cod]
+staticfiles/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+.DS_Store
+
+# Documentation and editor state: no effect on the running app, but every
+# change to them would otherwise invalidate the COPY layer and its rebuild.
+*.md
+.claude/

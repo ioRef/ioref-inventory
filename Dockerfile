@@ -1,5 +1,12 @@
 # syntax=docker/dockerfile:1
 
+# Pinned, and given its own stage rather than an inline `COPY --from=ghcr.io/...`:
+# Dependabot's docker ecosystem reads FROM lines, so this is what makes the uv
+# version something it can raise a pull request against. `latest` here would
+# also mean an upstream release could change a build with no commit to explain
+# it. See "Maintenance" in CLAUDE.md.
+FROM ghcr.io/astral-sh/uv:0.12.5 AS uv
+
 FROM python:3.13-slim AS base
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -7,7 +14,7 @@ ENV PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \
     PATH="/app/.venv/bin:$PATH"
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=uv /uv /usr/local/bin/uv
 
 WORKDIR /app
 

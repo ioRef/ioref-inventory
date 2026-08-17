@@ -1,0 +1,47 @@
+version: 2
+
+# The reminder to keep uv, the base image, and the actions current. Everything
+# here is pinned deliberately, which means nothing moves unless something moves
+# it. See "Maintenance" in CLAUDE.md for what to check when these land.
+
+updates:
+  # uv and python:3.13-slim, both FROM lines in the Dockerfile.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "build(deploy)"
+    groups:
+      docker:
+        patterns: ["*"]
+
+  # The actions in .github/workflows/build.yml.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Django, DRF, Unfold, and the rest of uv.lock.
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "build"
+    groups:
+      # Patches together in one pull request; anything larger on its own, so a
+      # Django or Unfold major has a place to argue for itself. Unfold owns the
+      # admin templates, so its upgrades are the ones that break visibly.
+      patch:
+        update-types: ["patch"]
+    ignore:
+      # Django 5.2 is an LTS, supported to April 2028. Moving off it is a
+      # deliberate migration, not a dependency bump.
+      - dependency-name: django
+        update-types: ["version-update:semver-major"]

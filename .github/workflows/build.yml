@@ -1,0 +1,90 @@
+name: build
+
+# Publishes an OCI image to GHCR for podman to pull on prod.
+#
+# Pull requests build the image but never push it, so a broken Dockerfile is
+# caught before merge without putting an unreviewed tag in the registry.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # Lowercase and hardcoded rather than ${{ github.repository }}: the org is
+  # spelled ioRef, and registry paths must be lowercase.
+  IMAGE: ghcr.io/ioref/ioref-inventory
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Exact version, not @v10: this action publishes no floating major tag,
+      # so a bare major fails the run with an unresolvable ref. Dependabot
+      # updates it either way.
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - run: uv sync --frozen
+
+      # No services and no env file. Every setting in config/settings.py has a
+      # default, DATABASE_URL falls back to SQLite, and Django builds its own
+      # test database in memory.
+      - run: uv run python manage.py test --verbosity 2
+
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+          # Emit a plain OCI image, not an index carrying attestation
+          # manifests. buildx attaches provenance and SBOM by default, which
+          # turns a single-platform build into a manifest list whose extra
+          # entries have no architecture. Podman then fails the pull with "no
+          # image found in manifest list for architecture amd64". Leave these
+          # off unless prod's podman is new enough to skip unknown entries.
+          provenance: false
+          sbom: false
