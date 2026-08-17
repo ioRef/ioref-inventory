@@ -97,6 +97,8 @@ class PartSerializer(serializers.ModelSerializer):
             "min_quantity",
             "max_quantity",
             "supplier_part_num",
+            "manufacturer",
+            "manufacturer_part_num",
             "on_floor",
             "in_backstock",
             "total_on_hand",

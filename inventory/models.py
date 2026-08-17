@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.db import models
 from django.db.models import OuterRef, Subquery
+from django.utils import timezone
 
 
 class Location(models.Model):
@@ -102,9 +103,11 @@ class Part(models.Model):
         max_length=200, blank=True, help_text="Text printed on the bin label."
     )
 
-    status = models.CharField(
-        max_length=20, choices=Status.choices, default=Status.ACTIVE, db_index=True
-    )
+    # Not `choices=Status.choices`: staff need to record statuses the four
+    # canonical values don't cover ("on backorder", "awaiting quote"). The
+    # admin still offers the canonical values as suggestions -- see
+    # PartAdminForm's status widget -- but does not require picking one.
+    status = models.CharField(max_length=100, default=Status.ACTIVE, db_index=True)
     unit = models.CharField(max_length=32, default="each")
     group = models.ForeignKey(
         Group,
@@ -134,6 +137,8 @@ class Part(models.Model):
     )
     max_quantity = models.PositiveIntegerField(null=True, blank=True)
     supplier_part_num = models.CharField(max_length=128, blank=True)
+    manufacturer = models.CharField(max_length=200, blank=True, default="")
+    manufacturer_part_num = models.CharField(max_length=128, blank=True, default="")
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -242,7 +247,9 @@ class StockEvent(models.Model):
     kind = models.CharField(max_length=16, choices=Kind.choices)
     quantity = models.PositiveIntegerField()
 
-    observed_at = models.DateTimeField(help_text="When the count was taken.")
+    observed_at = models.DateTimeField(
+        default=timezone.now, help_text="When the count was taken."
+    )
     recorded_at = models.DateTimeField(auto_now_add=True)
     recorded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

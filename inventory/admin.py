@@ -1,8 +1,10 @@
+from django import forms
 from django.contrib import admin
 from django.db.models import OuterRef, Subquery
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.contrib.filters.admin import RangeDateFilter
+from unfold.widgets import UnfoldAdminTextInputWidget
 
 from .models import Group, Location, Part, PriceObservation, StockEvent, Tag
 
@@ -40,8 +42,35 @@ class PriceObservationInline(TabularInline):
         return False
 
 
+class StatusInput(UnfoldAdminTextInputWidget):
+    """Free text, with the canonical values offered as suggestions.
+
+    Part.status has no `choices=` -- staff need to record statuses the four
+    canonical values don't cover -- so this renders a plain text input backed
+    by a <datalist> instead of a <select>, letting a click-through pick still
+    reach the common values without constraining what can be typed.
+    """
+
+    def render(self, name, value, attrs=None, renderer=None):
+        list_id = f"{attrs['id']}_suggestions" if attrs and attrs.get("id") else "status_suggestions"
+        attrs = {**(attrs or {}), "list": list_id}
+        input_html = super().render(name, value, attrs, renderer)
+        options = format_html_join(
+            "", "<option value=\"{}\">", ((choice,) for choice, _ in Part.Status.choices)
+        )
+        return format_html('{}<datalist id="{}">{}</datalist>', input_html, list_id, options)
+
+
+class PartAdminForm(forms.ModelForm):
+    class Meta:
+        model = Part
+        fields = "__all__"
+        widgets = {"status": StatusInput}
+
+
 @admin.register(Part)
 class PartAdmin(ModelAdmin):
+    form = PartAdminForm
     list_display = (
         "part_number",
         "short_name",
@@ -53,7 +82,14 @@ class PartAdmin(ModelAdmin):
         "stock_state",
     )
     list_filter = ("status", "group", "tags", "location")
-    search_fields = ("part_number", "short_name", "description", "supplier_part_num")
+    search_fields = (
+        "part_number",
+        "short_name",
+        "description",
+        "supplier_part_num",
+        "manufacturer",
+        "manufacturer_part_num",
+    )
     autocomplete_fields = ("group", "tags")
     inlines = (StockEventInline, PriceObservationInline)
     list_select_related = ("location", "group")
