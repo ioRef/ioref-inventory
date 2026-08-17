@@ -1,0 +1,73 @@
+/* Stock column.
+ *
+ * Most rows are healthy, so a healthy row gets no decoration at all -- just the
+ * number. Only the two exception states are marked, which keeps the eye landing
+ * on the rows that need work instead of scanning a wall of pills.
+ *
+ * Colours are the maker-cards category palette, used as tints rather than solid
+ * fills; a saturated fill per row is far too loud at list density.
+ */
+
+/* Sized against the 18px body set in theme.css -- a small badge beside larger
+ * body text reads as an afterthought, and this is the column staff scan. */
+.stock-value {
+  font-variant-numeric: tabular-nums;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.stock-flag {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+  font-variant-numeric: tabular-nums;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* Suffix rather than a second pill, so the badge stays one shape. */
+.stock-flag::after {
+  content: attr(data-flag);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+/* power crimson -- below minimum */
+.stock-flag--restock {
+  color: #a01038;
+  background: rgb(221 27 80 / 0.11);
+}
+
+/* connector grey -- never counted. An em dash, not a zero: absence of data is
+ * not the same claim as "there are none". */
+.stock-flag--unknown {
+  color: #55565a;
+  background: rgb(99 100 102 / 0.11);
+}
+
+html.dark .stock-flag--restock {
+  color: #ff8fac;
+  background: rgb(221 27 80 / 0.18);
+}
+
+html.dark .stock-flag--unknown {
+  color: #a9abaf;
+  background: rgb(153 155 160 / 0.16);
+}
+
+/* Clickable rows (see admin.js). The hover cue has to read on the whole row,
+ * not just the linked cell, or the widened hit area is undiscoverable. */
+#result_list tbody tr:hover {
+  background-color: #f2f2f2;
+}
+
+html.dark #result_list tbody tr:hover {
+  background-color: #262626;
+}

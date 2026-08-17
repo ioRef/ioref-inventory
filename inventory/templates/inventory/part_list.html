@@ -1,0 +1,81 @@
+{% extends "inventory/base.html" %}
+
+{% block title %}Parts{% endblock %}
+
+{% block content %}
+<h1>Parts</h1>
+
+<form class="filters" method="get">
+    <input type="search" name="q" value="{{ search }}" placeholder="Search name, description or number" aria-label="Search">
+    <select name="group" aria-label="Kind">
+        <option value="">Any kind</option>
+        {% for g in groups %}
+            <option value="{{ g.slug }}" {% if g.slug == group %}selected{% endif %}>{{ g }}</option>
+        {% endfor %}
+    </select>
+    <select name="location" aria-label="Location">
+        <option value="">Anywhere</option>
+        {% for loc in locations %}
+            <option value="{{ loc.code }}" {% if loc.code == location %}selected{% endif %}>{{ loc }}</option>
+        {% endfor %}
+    </select>
+    <label class="check">
+        <input type="checkbox" name="show" value="low" {% if show == "low" %}checked{% endif %}>
+        Below minimum only
+    </label>
+    <button type="submit">Filter</button>
+    {% if search or location or group or show %}<a class="clear" href="{% url 'part_list' %}">Clear</a>{% endif %}
+</form>
+
+<p class="count">{{ total }} part{{ total|pluralize }}</p>
+
+<table>
+    <thead>
+        <tr>
+            <th scope="col">Number</th>
+            <th scope="col">Part</th>
+            <th scope="col">Kind</th>
+            <th scope="col">Location</th>
+            <th scope="col" class="num">On floor</th>
+            <th scope="col" class="num">Backstock</th>
+            <th scope="col" class="num">Total</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for part in parts %}
+            <tr>
+                <td class="num-id"><a href="{% url 'part_detail' part.part_number %}">{{ part.part_number }}</a></td>
+                <td>
+                    {{ part.short_name }}
+                    {% if part.status != "active" %}<span class="status">{{ part.get_status_display }}</span>{% endif %}
+                </td>
+                <td>{{ part.group|default:"—" }}</td>
+                <td>{{ part.location|default:"—" }}</td>
+                <td class="num">{{ part.on_floor|default_if_none:"—" }}</td>
+                <td class="num">{{ part.in_backstock|default_if_none:"—" }}</td>
+                <td class="num">
+                    {% if part.total_on_hand is None %}
+                        <span class="uncounted" title="Never counted">—</span>
+                    {% elif part.needs_restock %}
+                        <span class="low" title="Below the minimum of {{ part.min_quantity }}">{{ part.total_on_hand }}</span>
+                    {% else %}{{ part.total_on_hand }}{% endif %}
+                </td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="7" class="empty">Nothing matches that search.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if page_obj.has_other_pages %}
+    <nav class="pager">
+        {% if page_obj.has_previous %}
+            <a href="?q={{ search }}&location={{ location }}&group={{ group }}&show={{ show }}&page={{ page_obj.previous_page_number }}">&larr; Previous</a>
+        {% endif %}
+        <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+            <a href="?q={{ search }}&location={{ location }}&group={{ group }}&show={{ show }}&page={{ page_obj.next_page_number }}">Next &rarr;</a>
+        {% endif %}
+    </nav>
+{% endif %}
+{% endblock %}

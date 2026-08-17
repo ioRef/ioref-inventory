@@ -1,0 +1,181 @@
+/* Pull the admin toward the ioref.org / maker-cards look.
+ *
+ * Two things Unfold does by default that fight it:
+ *   1. Its base palette is Tailwind slate, which is blue-tinted. ioref.org's
+ *      greys are pure neutral (#f2f2f2, #c4c4c4, #4f4f4f). Fixed in settings
+ *      via UNFOLD["COLORS"]["base"]; this file handles the rest.
+ *   2. Zebra-striped rows. maker-cards uses flat backgrounds with hairline
+ *      rules, which stays legible at list density without the banding.
+ */
+
+/* Matches views/layouts/main-layout.hbs. External request: the admin degrades
+ * to the system stack without it, so an air-gapped deploy still works. Say the
+ * word and I'll vendor the woff2 into static/ instead. */
+@import url("https://fonts.googleapis.com/css2?family=Nunito+Sans:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&display=swap");
+
+:root {
+  --font-ioref: "Nunito Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, sans-serif;
+}
+
+html,
+body,
+.unfold,
+input,
+select,
+textarea,
+button {
+  font-family: var(--font-ioref);
+}
+
+/* --- Type scale -----------------------------------------------------------
+ * Built from the maker-cards part/info pages and then raised one step for
+ * legibility at a bench: 28px page titles, 24px section headings, 18px body.
+ * Unfold ships 12-14px throughout, which is far too small here.
+ *
+ * !important throughout: Unfold sizes text with Tailwind utility classes
+ * (text-xs, text-sm, font-medium) applied directly to the elements, so a
+ * plain selector loses regardless of specificity elsewhere in this file.
+ */
+
+body,
+.unfold {
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+/* Page title -- .part_name in main.scss */
+#content h1,
+.unfold h1 {
+  font-size: 28px !important;
+  font-weight: 700 !important;
+  line-height: 1.3;
+}
+
+/* Section headings -- .section_title in main.scss */
+#content h2,
+.unfold h2,
+fieldset > h2,
+.module > h2 {
+  font-size: 24px !important;
+  font-weight: 700 !important;
+  line-height: 1.35;
+}
+
+#content h3,
+.unfold h3 {
+  font-size: 20px !important;
+  font-weight: 700 !important;
+}
+
+/* Table body: readable, not dense. */
+#result_list td,
+#result_list th,
+.changelist-table td,
+.changelist-table th {
+  font-size: 17px !important;
+  line-height: 1.5;
+  padding-top: 0.625rem !important;
+  padding-bottom: 0.625rem !important;
+}
+
+/* Column headers and their links -- .label in main.scss is bold. */
+#result_list thead th,
+#result_list thead th a,
+.changelist-table thead th,
+.changelist-table thead th a {
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.01em;
+}
+
+/* Form labels: bold, matching .attribute .label */
+form label,
+.unfold label,
+fieldset .form-row label {
+  font-size: 17px !important;
+  font-weight: 700 !important;
+}
+
+/* >=16px on inputs is also what stops iOS Safari zooming the viewport on focus,
+ * which matters if anyone counts stock from a phone. */
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="url"],
+input[type="password"],
+input[type="search"],
+select,
+textarea,
+.unfold input,
+.unfold select,
+.unfold textarea {
+  font-size: 17px !important;
+}
+
+/* Sidebar navigation */
+#nav-sidebar a,
+#nav-sidebar-apps a {
+  font-size: 16px !important;
+  font-weight: 600 !important;
+}
+
+/* Help text stays smaller than body but above Unfold's 11-12px. */
+.help,
+.helptext,
+.unfold .text-xs {
+  font-size: 15px !important;
+  line-height: 1.5;
+}
+
+/* Buttons */
+.button,
+input[type="submit"],
+.unfold button {
+  font-size: 16px !important;
+  font-weight: 600 !important;
+}
+
+/* --- Flat rows, hairline rules ------------------------------------------
+ * !important is load-bearing: Unfold applies striping through Tailwind utility
+ * classes on the element, which a plain selector cannot outrank. */
+#result_list tbody tr > td,
+#result_list tbody tr > th,
+.changelist-table tbody tr > td,
+.changelist-table tbody tr > th {
+  background-color: transparent !important;
+}
+
+#result_list tbody tr,
+.changelist-table tbody tr {
+  border-bottom: 1px solid #eeeeee;
+}
+
+html.dark #result_list tbody tr,
+html.dark .changelist-table tbody tr {
+  border-bottom-color: #333333;
+}
+
+/* Hover is the row affordance now that striping is gone. */
+#result_list tbody tr:hover > td,
+#result_list tbody tr:hover > th,
+.changelist-table tbody tr:hover > td,
+.changelist-table tbody tr:hover > th {
+  background-color: #f2f2f2 !important;
+}
+
+html.dark #result_list tbody tr:hover > td,
+html.dark #result_list tbody tr:hover > th,
+html.dark .changelist-table tbody tr:hover > td,
+html.dark .changelist-table tbody tr:hover > th {
+  background-color: #262626 !important;
+}
+
+/* Page ground: off-white, not slate. */
+body {
+  background-color: #fdfdfd;
+}
+
+html.dark body {
+  background-color: #1d1d1d;
+}

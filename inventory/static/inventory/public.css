@@ -1,0 +1,138 @@
+/* Public browsing views.
+ *
+ * Intentionally plain. This application ships to other organisations, so it
+ * carries no house styling -- ioref-web renders the same data in IDeATe's
+ * colours. Neutral greys and a system font stack look deliberate anywhere.
+ *
+ * Type is sized for reading at a bench, matching the decision made for the
+ * admin: 18px body rather than the 13-14px a default Django app would use.
+ */
+
+:root {
+  --ink: #1d1d1d;
+  --ink-soft: #4f4f4f;
+  --rule: #d8d8d8;
+  --rule-soft: #eeeeee;
+  --ground: #fdfdfd;
+  --hover: #f2f2f2;
+  --low: #a01038;
+  --low-wash: rgb(221 27 80 / 0.11);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 18px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+main { margin: 0 auto; max-width: 68rem; padding: 0 1.25rem 4rem; }
+
+.topbar {
+  align-items: baseline;
+  border-bottom: 2px solid var(--ink);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin: 0 auto 2rem;
+  max-width: 68rem;
+  padding: 1.25rem;
+}
+
+.brand { color: var(--ink); font-size: 1.25rem; font-weight: 700; text-decoration: none; }
+.topbar nav { color: var(--ink-soft); display: flex; font-size: 0.95rem; gap: 1rem; }
+.who { color: var(--ink-soft); }
+
+h1 { font-size: 1.75rem; font-weight: 700; line-height: 1.25; margin: 0 0 0.25rem; }
+h2 { font-size: 1.35rem; font-weight: 700; margin: 2.5rem 0 0.75rem; }
+.subtitle { color: var(--ink-soft); font-variant-numeric: tabular-nums; margin: 0 0 1.5rem; }
+.description { max-width: 46rem; }
+.back { margin: 0 0 1rem; }
+
+a { color: var(--ink); text-underline-offset: 2px; }
+a:hover { color: var(--low); }
+
+.filters {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+/* 16px minimum stops iOS Safari zooming the viewport on focus, which matters
+ * if anyone looks this up from a phone at the shelf. */
+.filters input[type="search"],
+.filters select,
+.filters button {
+  border: 1px solid var(--rule);
+  border-radius: 0.25rem;
+  font: inherit;
+  font-size: 1rem;
+  padding: 0.4rem 0.6rem;
+}
+
+.filters input[type="search"] { flex: 1 1 18rem; }
+.filters button { background: var(--ink); border-color: var(--ink); color: var(--ground); cursor: pointer; font-weight: 600; }
+.check { align-items: center; color: var(--ink-soft); display: flex; font-size: 1rem; gap: 0.4rem; }
+.clear { color: var(--ink-soft); font-size: 0.95rem; }
+.count { color: var(--ink-soft); margin: 0 0 0.5rem; }
+
+table { border-collapse: collapse; width: 100%; }
+
+th, td {
+  border-bottom: 1px solid var(--rule-soft);
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+thead th {
+  border-bottom: 2px solid var(--ink);
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+tbody tr:hover { background: var(--hover); }
+
+/* Tabular figures so quantities line up and a mis-keyed digit is obvious. */
+.num, .num-id { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.num { text-align: right; }
+
+/* Only exceptions are marked. Most rows are fine, and badging every one buries
+ * the handful that need attention -- same rule as the admin's stock column. */
+.low {
+  background: var(--low-wash);
+  border-radius: 0.25rem;
+  color: var(--low);
+  font-weight: 700;
+  padding: 0.05rem 0.4rem;
+}
+
+.uncounted { color: var(--ink-soft); }
+.status { color: var(--ink-soft); font-size: 0.85rem; white-space: nowrap; }
+.empty { color: var(--ink-soft); }
+
+.facts { display: grid; gap: 0.25rem 1.5rem; grid-template-columns: max-content 1fr; margin: 0 0 1rem; }
+.facts dt { color: var(--ink-soft); }
+.facts dd { margin: 0; }
+
+.pager { align-items: center; color: var(--ink-soft); display: flex; gap: 1.25rem; margin-top: 1.5rem; }
+
+footer {
+  border-top: 1px solid var(--rule-soft);
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  margin: 3rem auto 0;
+  max-width: 68rem;
+  padding: 1rem 1.25rem 3rem;
+}
+
+@media (max-width: 40rem) {
+  /* Six columns do not reflow usefully at phone widths; scroll instead. */
+  table { display: block; overflow-x: auto; white-space: nowrap; }
+}

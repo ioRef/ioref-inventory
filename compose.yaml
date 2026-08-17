@@ -1,0 +1,32 @@
+services:
+  inventory:
+    build: .
+    ports:
+      - "${PORT:-8000}:8000"
+    env_file: .env
+    volumes:
+      # Named volume, not a bind mount: SQLite on a bind mount across a host
+      # filesystem boundary can see locking misbehave.
+      - inventory-data:/app/data
+    restart: unless-stopped
+
+  # Postgres is opt-in and off by default -- SQLite is the portable default.
+  #   docker compose --profile postgres up
+  # and set DATABASE_URL=postgres://ioref:ioref@db:5432/ioref
+  db:
+    image: postgres:17-alpine
+    profiles: [postgres]
+    environment:
+      POSTGRES_USER: ioref
+      POSTGRES_PASSWORD: ioref
+      POSTGRES_DB: ioref
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ioref"]
+      interval: 10s
+      retries: 5
+
+volumes:
+  inventory-data:
+  postgres-data:

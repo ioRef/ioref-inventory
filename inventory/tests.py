@@ -1,0 +1,426 @@
+from datetime import timedelta
+
+from django.contrib.auth import get_user_model
+from django.test import TestCase, override_settings
+from django.urls import reverse
+from django.utils import timezone
+from rest_framework.test import APIClient
+
+from accounts.models import ApiKey
+from inventory.models import (
+    Group,
+    Location,
+    Part,
+    PriceObservation,
+    StockEvent,
+    Tag,
+)
+
+
+class StockDerivationTests(TestCase):
+    """The derived values that replace the legacy current_* mirror columns."""
+
+    def setUp(self):
+        self.bench = Location.objects.create(code="soldering bench")
+        self.part = Part.objects.create(
+            part_number="0002",
+            short_name="soldering heat sink",
+            location=self.bench,
+            min_quantity=2,
+            unit="each",
+        )
+
+    def _count(self, kind, quantity, days_ago=0):
+        return StockEvent.objects.create(
+            part=self.part,
+            kind=kind,
+            quantity=quantity,
+            observed_at=timezone.now() - timedelta(days=days_ago),
+        )
+
+    def test_uncounted_part_reports_none_not_zero(self):
+        # Legacy used -1 as a sentinel for "never counted", which then flowed
+        # into arithmetic. Absence must stay distinguishable from a real zero.
+        self.assertIsNone(self.part.on_floor)
+        self.assertIsNone(self.part.total_on_hand)
+        self.assertFalse(self.part.needs_restock)
+
+    def test_latest_observation_wins_regardless_of_insert_order(self):
+        self._count(StockEvent.Kind.INVENTORY, 5, days_ago=1)
+        self._count(StockEvent.Kind.INVENTORY, 99, days_ago=30)  # backdated
+        self.assertEqual(self.part.on_floor, 5)
+
+    def test_total_matches_legacy_semantics(self):
+        # Legacy part 2409: inventory 1 + backstock 10 = total_on_hand 11,
+        # and 11/3 rendered as "367%".
+        part = Part.objects.create(
+            part_number="2409", short_name="brass wool", min_quantity=3
+        )
+        now = timezone.now()
+        StockEvent.objects.create(
+            part=part, kind=StockEvent.Kind.INVENTORY, quantity=1, observed_at=now
+        )
+        StockEvent.objects.create(
+            part=part, kind=StockEvent.Kind.BACKSTOCK, quantity=10, observed_at=now
+        )
+        self.assertEqual(part.total_on_hand, 11)
+        self.assertAlmostEqual(float(part.stock_ratio), 11 / 3, places=4)
+
+    def test_one_kind_counted_still_totals(self):
+        self._count(StockEvent.Kind.INVENTORY, 4)
+        self.assertEqual(self.part.total_on_hand, 4)
+
+    def test_needs_restock_below_minimum(self):
+        self._count(StockEvent.Kind.INVENTORY, 1)
+        self.assertTrue(self.part.needs_restock)
+        self._count(StockEvent.Kind.BACKSTOCK, 5)
+        self.assertFalse(self.part.needs_restock)
+
+
+class ApiKeyTests(TestCase):
+    def test_generated_token_authenticates_and_is_not_stored(self):
+        key, token = ApiKey.generate("frontdoor")
+        self.assertNotIn(token, key.hashed_key)
+        self.assertEqual(ApiKey.authenticate(token), key)
+
+    def test_wrong_and_malformed_tokens_rejected(self):
+        _, token = ApiKey.generate("frontdoor")
+        self.assertIsNone(ApiKey.authenticate(token + "x"))
+        self.assertIsNone(ApiKey.authenticate("garbage"))
+        self.assertIsNone(ApiKey.authenticate(""))
+
+    def test_revoked_and_expired_keys_rejected(self):
+        key, token = ApiKey.generate("revoked")
+        key.is_active = False
+        key.save()
+        self.assertIsNone(ApiKey.authenticate(token))
+
+        expired, token2 = ApiKey.generate("expired")
+        expired.expires_at = timezone.now() - timedelta(seconds=1)
+        expired.save()
+        self.assertIsNone(ApiKey.authenticate(token2))
+
+
+class ApiTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.part = Part.objects.create(
+            part_number="0006", short_name="soldering sponge", min_quantity=5
+        )
+        StockEvent.objects.create(
+            part=self.part,
+            kind=StockEvent.Kind.INVENTORY,
+            quantity=7,
+            observed_at=timezone.now(),
+        )
+        _, self.read_token = ApiKey.generate("frontdoor", scope=ApiKey.Scope.READ)
+        _, self.write_token = ApiKey.generate("scanner", scope=ApiKey.Scope.WRITE)
+
+    def auth(self, token):
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    def test_anonymous_is_denied(self):
+        self.assertEqual(self.client.get("/api/v1/parts/").status_code, 401)
+
+    def test_health_needs_no_auth(self):
+        self.assertEqual(self.client.get("/api/v1/health/").status_code, 200)
+
+    def test_read_key_gets_flattened_stock(self):
+        self.auth(self.read_token)
+        response = self.client.get(f"/api/v1/parts/{self.part.part_number}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["on_floor"], 7)
+        self.assertEqual(response.data["total_on_hand"], 7)
+
+    def test_list_annotation_path_works(self):
+        """Exercises the _ann_ annotations rather than the property fallback."""
+        self.auth(self.read_token)
+        response = self.client.get("/api/v1/parts/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["results"][0]["on_floor"], 7)
+
+    def test_needs_restock_filter_runs_in_sql(self):
+        self.auth(self.read_token)
+        response = self.client.get("/api/v1/parts/?needs_restock=1")
+        # 7 on hand against a minimum of 5 -- not due a restock.
+        self.assertEqual(response.data["count"], 0)
+
+        StockEvent.objects.create(
+            part=self.part,
+            kind=StockEvent.Kind.INVENTORY,
+            quantity=2,
+            observed_at=timezone.now(),
+        )
+        response = self.client.get("/api/v1/parts/?needs_restock=1")
+        self.assertEqual(response.data["count"], 1)
+
+    def test_read_key_cannot_write(self):
+        self.auth(self.read_token)
+        response = self.client.post(
+            f"/api/v1/parts/{self.part.part_number}/stock-events/",
+            {"kind": "inventory", "quantity": 3, "observed_at": timezone.now()},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_write_key_records_event_without_a_user(self):
+        self.auth(self.write_token)
+        response = self.client.post(
+            f"/api/v1/parts/{self.part.part_number}/stock-events/",
+            {"kind": "inventory", "quantity": 3, "observed_at": timezone.now()},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        event = self.part.stock_events.order_by("-recorded_at").first()
+        self.assertEqual(event.quantity, 3)
+        # Service callers are not people; nothing should be attributed to a user.
+        self.assertIsNone(event.recorded_by)
+
+    def test_history_is_queryable(self):
+        """The thing the JSON blobs made impossible without loading everything."""
+        self.auth(self.read_token)
+        response = self.client.get(
+            f"/api/v1/parts/{self.part.part_number}/stock-events/?kind=inventory"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+
+
+class BulkLookupTests(TestCase):
+    """`part_number__in`, used by ioref-web's component pages."""
+
+    def setUp(self):
+        self.client = APIClient()
+        for number in ("0054", "0056", "0058"):
+            Part.objects.create(part_number=number, short_name=f"cap {number}")
+        _, token = ApiKey.generate("web", scope=ApiKey.Scope.READ)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    def test_returns_only_the_requested_parts(self):
+        response = self.client.get("/api/v1/parts/?part_number__in=0054,0058")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            sorted(p["part_number"] for p in response.data["results"]), ["0054", "0058"]
+        )
+
+    def test_tolerates_whitespace_and_unknown_numbers(self):
+        response = self.client.get("/api/v1/parts/?part_number__in= 0054 , 9999 ")
+        self.assertEqual([p["part_number"] for p in response.data["results"]], ["0054"])
+
+    def test_one_request_covers_many_parts(self):
+        response = self.client.get("/api/v1/parts/?part_number__in=0054,0056,0058")
+        self.assertEqual(response.data["count"], 3)
+
+
+class PublicBrowseTests(TestCase):
+    """Read-only HTML views at /.
+
+    The security-relevant behaviour is that anonymous visitors see stock but
+    not what it cost or who sold it.
+    """
+
+    def setUp(self):
+        self.bench = Location.objects.create(code="soldering bench")
+        self.part = Part.objects.create(
+            part_number="0002",
+            short_name="soldering heat sink",
+            location=self.bench,
+            min_quantity=2,
+        )
+        StockEvent.objects.create(
+            part=self.part,
+            kind=StockEvent.Kind.INVENTORY,
+            quantity=5,
+            observed_at=timezone.now(),
+        )
+        PriceObservation.objects.create(
+            part=self.part,
+            price="2.20",
+            supplier="Amazon",
+            purchase_link="https://example.invalid/thing",
+            observed_at=timezone.now(),
+        )
+
+    def test_list_is_public(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "soldering heat sink")
+
+    def test_detail_is_public_and_shows_stock(self):
+        response = self.client.get("/parts/0002/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "5")
+
+    def test_anonymous_visitors_do_not_see_prices_or_suppliers(self):
+        response = self.client.get("/parts/0002/")
+        self.assertNotContains(response, "Amazon")
+        self.assertNotContains(response, "2.20")
+        self.assertNotContains(response, "example.invalid")
+
+    def test_signed_in_staff_do_see_prices(self):
+        User = get_user_model()
+        user = User.objects.create_user(username="staff@example.edu", password="x")
+        self.client.force_login(user)
+        response = self.client.get("/parts/0002/")
+        self.assertContains(response, "Amazon")
+        self.assertContains(response, "2.20")
+
+    def test_search_filters(self):
+        Part.objects.create(part_number="0099", short_name="brass wool")
+        self.assertContains(self.client.get("/?q=brass"), "brass wool")
+        self.assertNotContains(self.client.get("/?q=brass"), "soldering heat sink")
+
+    def test_low_stock_filter(self):
+        # 5 on hand against a minimum of 2 -- not low.
+        self.assertNotContains(self.client.get("/?show=low"), "soldering heat sink")
+        StockEvent.objects.create(
+            part=self.part,
+            kind=StockEvent.Kind.INVENTORY,
+            quantity=1,
+            observed_at=timezone.now(),
+        )
+        self.assertContains(self.client.get("/?show=low"), "soldering heat sink")
+
+    def test_discontinued_parts_are_hidden(self):
+        Part.objects.create(
+            part_number="0028",
+            short_name="retired thing",
+            status=Part.Status.DISCONTINUED,
+        )
+        self.assertNotContains(self.client.get("/"), "retired thing")
+
+    def test_unknown_part_404s(self):
+        self.assertEqual(self.client.get("/parts/9999/").status_code, 404)
+
+    @override_settings(PUBLIC_BROWSE=False)
+    def test_browsing_can_be_switched_off(self):
+        """Deployments where stock levels themselves are not public."""
+        self.assertEqual(self.client.get("/").status_code, 404)
+        self.assertEqual(self.client.get("/parts/0002/").status_code, 404)
+
+    @override_settings(PUBLIC_BROWSE=False)
+    def test_switching_browsing_off_does_not_affect_the_api(self):
+        _, token = ApiKey.generate("web", scope=ApiKey.Scope.READ)
+        response = self.client.get(
+            "/api/v1/parts/", HTTP_AUTHORIZATION=f"Bearer {token}"
+        )
+        self.assertEqual(response.status_code, 200)
+
+
+class GroupTests(TestCase):
+    """Classification, kept separate from location.
+
+    The legacy schema had no group field, so "Input: Potentiometers" was stored
+    as a place. A part could not then be reclassified without appearing to move.
+    """
+
+    def setUp(self):
+        self.pots = Group.objects.create(name="Potentiometers", slug="potentiometers")
+        self.bin = Location.objects.create(code="B11-R2-C3")
+        self.part = Part.objects.create(
+            part_number="0390",
+            short_name="potentiometer",
+            group=self.pots,
+            location=self.bin,
+        )
+
+    def test_a_part_can_move_bins_without_being_reclassified(self):
+        self.part.location = Location.objects.create(code="B12-R1-C1")
+        self.part.save()
+        self.part.refresh_from_db()
+        self.assertEqual(self.part.group, self.pots)
+
+    def test_a_part_can_be_reclassified_without_moving(self):
+        trimmers = Group.objects.create(name="Trimmers", slug="trimmers")
+        self.part.group = trimmers
+        self.part.save()
+        self.part.refresh_from_db()
+        self.assertEqual(self.part.location, self.bin)
+
+    def test_slugs_are_unique(self):
+        from django.db import IntegrityError
+
+        with self.assertRaises(IntegrityError):
+            Group.objects.create(name="Pots", slug="potentiometers")
+
+    def test_group_in_use_cannot_be_deleted(self):
+        from django.db.models import ProtectedError
+
+        with self.assertRaises(ProtectedError):
+            self.pots.delete()
+
+    def test_a_part_has_exactly_one_group(self):
+        """Type is singular -- that is what makes 'capacitors below minimum'
+        and 'which component page owns this' unambiguous."""
+        self.assertEqual(self.part.group, self.pots)
+        self.assertFalse(hasattr(self.part, "groups"))
+
+
+class TagTests(TestCase):
+    """Cross-cutting facts, which are plural where type is singular."""
+
+    def setUp(self):
+        self.pots = Group.objects.create(name="Potentiometers", slug="potentiometers")
+        self.touch = Tag.objects.create(name="touch", slug="touch")
+        self.lending = Tag.objects.create(name="lending", slug="lending")
+
+    def test_a_soft_pot_is_a_pot_that_is_also_touch(self):
+        """Part 0386: the legacy data filed it under "Touch" because that is how
+        it is used, which lost the fact that it is a potentiometer."""
+        part = Part.objects.create(
+            part_number="0386", short_name="linear soft potentiometer", group=self.pots
+        )
+        part.tags.add(self.touch)
+        self.assertEqual(part.group, self.pots)
+        self.assertEqual([t.slug for t in part.tags.all()], ["touch"])
+
+    def test_a_part_can_carry_several_tags(self):
+        part = Part.objects.create(part_number="0001", short_name="thing")
+        part.tags.set([self.touch, self.lending])
+        self.assertEqual(part.tags.count(), 2)
+
+    def test_tags_are_optional(self):
+        part = Part.objects.create(part_number="0002", short_name="thing")
+        self.assertEqual(part.tags.count(), 0)
+
+
+class GroupApiTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        pots = Group.objects.create(name="Potentiometers", slug="potentiometers")
+        caps = Group.objects.create(name="Capacitors", slug="capacitors")
+        touch = Tag.objects.create(name="touch", slug="touch")
+
+        pot = Part.objects.create(part_number="0390", short_name="pot", group=pots)
+        soft = Part.objects.create(part_number="0386", short_name="soft pot", group=pots)
+        soft.tags.add(touch)
+        Part.objects.create(part_number="0054", short_name="cap", group=caps)
+
+        _, token = ApiKey.generate("web", scope=ApiKey.Scope.READ)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    def test_part_serialises_its_group_and_tags(self):
+        response = self.client.get("/api/v1/parts/0386/")
+        self.assertEqual(response.data["group"]["slug"], "potentiometers")
+        self.assertEqual(response.data["tags"], ["touch"])
+
+    def test_filtering_by_group(self):
+        """This is what ioref-web builds a component page's part list from."""
+        response = self.client.get("/api/v1/parts/?group=potentiometers")
+        self.assertEqual(
+            sorted(p["part_number"] for p in response.data["results"]), ["0386", "0390"]
+        )
+
+    def test_filtering_by_tag(self):
+        response = self.client.get("/api/v1/parts/?tag=touch")
+        self.assertEqual([p["part_number"] for p in response.data["results"]], ["0386"])
+
+    def test_groups_are_listable_with_counts(self):
+        response = self.client.get("/api/v1/groups/")
+        self.assertEqual(response.status_code, 200)
+        counts = {g["slug"]: g["part_count"] for g in response.data["results"]}
+        # part_count saves the frontdoor a request per group.
+        self.assertEqual(counts, {"potentiometers": 2, "capacitors": 1})
+
+    def test_tags_are_listable(self):
+        self.assertEqual(self.client.get("/api/v1/tags/").data["count"], 1)

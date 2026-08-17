@@ -1,0 +1,93 @@
+{% extends "inventory/base.html" %}
+
+{% block title %}{{ part.part_number }} {{ part.short_name }}{% endblock %}
+
+{% block content %}
+<p class="back"><a href="{% url 'part_list' %}">&larr; All parts</a></p>
+
+<h1>{{ part.short_name }}</h1>
+<p class="subtitle">{{ part.part_number }}{% if part.status != "active" %} · {{ part.get_status_display }}{% endif %}</p>
+
+{% if part.description %}<p class="description">{{ part.description }}</p>{% endif %}
+
+<dl class="facts">
+    <dt>Kind</dt><dd>{{ part.group|default:"—" }}</dd>
+    <dt>Location</dt><dd>{{ part.location|default:"—" }}</dd>
+    {% if part.tags.all %}
+        <dt>Tags</dt><dd>{% for tag in part.tags.all %}{{ tag }}{% if not forloop.last %}, {% endif %}{% endfor %}</dd>
+    {% endif %}
+    <dt>On the floor</dt>
+    <dd>{% if part.on_floor is None %}never counted{% else %}{{ part.on_floor }} {{ part.unit }}{% endif %}</dd>
+    <dt>Backstock</dt>
+    <dd>{% if part.in_backstock is None %}never counted{% else %}{{ part.in_backstock }} {{ part.unit }}{% endif %}</dd>
+    {% if part.total_on_hand is not None %}
+        <dt>Total on hand</dt>
+        <dd>
+            {% if part.needs_restock %}<span class="low">{{ part.total_on_hand }} {{ part.unit }}</span>, below the minimum of {{ part.min_quantity }}
+            {% else %}{{ part.total_on_hand }} {{ part.unit }}{% endif %}
+        </dd>
+    {% endif %}
+    {% if part.min_quantity %}<dt>Minimum</dt><dd>{{ part.min_quantity }}</dd>{% endif %}
+</dl>
+
+<h2>Count history</h2>
+{% if counts %}
+    <table>
+        <thead>
+            <tr>
+                <th scope="col">Counted</th>
+                <th scope="col">What</th>
+                <th scope="col" class="num">Quantity</th>
+                <th scope="col">By</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for event in counts %}
+                <tr>
+                    <td>{{ event.observed_at|date:"j M Y" }}</td>
+                    <td>{{ event.get_kind_display }}</td>
+                    <td class="num">{{ event.quantity }}</td>
+                    <td>{{ event.recorded_by|default:"—" }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p class="empty">This part has never been counted.</p>
+{% endif %}
+
+{% comment %}
+    Prices and suppliers are staff-only. Stock levels answer "do you have any
+    and where"; what it cost and who sold it is procurement's business. The
+    view does not query them at all for anonymous visitors.
+{% endcomment %}
+{% if may_see_costs %}
+    <h2>Prices</h2>
+    {% if prices %}
+        <table>
+            <thead>
+                <tr>
+                    <th scope="col">Observed</th>
+                    <th scope="col" class="num">Price</th>
+                    <th scope="col">Supplier</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for price in prices %}
+                    <tr>
+                        <td>{{ price.observed_at|date:"j M Y" }}</td>
+                        <td class="num">{{ price.currency }} {{ price.price }}</td>
+                        <td>
+                            {% if price.purchase_link %}
+                                <a href="{{ price.purchase_link }}" rel="noopener">{{ price.supplier|default:"link" }}</a>
+                            {% else %}{{ price.supplier|default:"—" }}{% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="empty">No price has been recorded.</p>
+    {% endif %}
+{% endif %}
+{% endblock %}

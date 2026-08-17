@@ -1,0 +1,32 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Inventory{% endblock %}</title>
+    {% comment %}
+        Deliberately unbranded. This application is meant to be deployable by
+        other organisations, so house styling belongs in whatever frontdoor sits
+        in front of it -- ioref-web renders the same data in IDeATe's colours.
+        Neutral greys and a system font stack look intentional anywhere.
+    {% endcomment %}
+    <link rel="stylesheet" href="{% static 'inventory/public.css' %}">
+</head>
+<body>
+<header class="topbar">
+    <a class="brand" href="{% url 'part_list' %}">{{ site_name|default:"Parts inventory" }}</a>
+    <nav>
+        {% if request.user.is_authenticated %}
+            <span class="who">{{ request.user }}</span>
+            {% if request.user.is_staff %}<a href="/admin/">Admin</a>{% endif %}
+        {% endif %}
+    </nav>
+</header>
+
+<main>{% block content %}{% endblock %}</main>
+
+<footer>
+    <p>Stock counts are as of the last time each part was counted, not a live total.</p>
+</footer>
+</body>
+</html>
