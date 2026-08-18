@@ -79,6 +79,9 @@ class HeaderAuthenticationMiddleware:
             auth.login(request, user)
             request.session["_header_authenticated"] = True
         else:
-            log.warning("SSO header asserted %r but authentication failed", username)
+            # Routine, not an anomaly: the backend does not create accounts, so
+            # anyone with a valid SSO session and no account here lands on this
+            # branch and continues anonymously.
+            log.info("SSO asserted %r, which resolved to no account", username)
 
         return self.get_response(request)

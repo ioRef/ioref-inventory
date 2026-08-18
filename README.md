@@ -136,8 +136,20 @@ Scopes are `read` (safe methods only) and `write`.
 Moving from Shibboleth to Entra is an env change plus a proxy reconfiguration,
 not an application change; no SAML or OIDC library is imported at module scope.
 
-Users are provisioned on first sight but get **no permissions**. SSO asserts who
-someone is, never that they may edit stock; granting staff access stays manual.
+Accounts are **never created by signing in**. SSO asserts who someone is, never
+that they may edit stock, and under `shib` the proxy admits everyone the
+institution vouches for. An eppn with no account authenticates as nobody and the
+request continues anonymously. Create accounts explicitly:
+
+```bash
+uv run python manage.py grant_staff you@andrew.cmu.edu --superuser
+uv run python manage.py grant_staff colleague@andrew.cmu.edu
+uv run python manage.py grant_staff departed@andrew.cmu.edu --revoke
+```
+
+Usernames are eppns, so a bare Andrew ID will never match the SSO headers.
+`--revoke` withdraws access without deleting the account, because stock events
+record who counted them.
 
 > **`AUTH_MODE=shib` is only safe behind a proxy that overwrites the identity
 > headers on every request.** The app trusts them completely. If it is reachable

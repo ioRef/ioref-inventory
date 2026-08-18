@@ -20,9 +20,21 @@ class TrustedHeaderBackend(BaseBackend):
     setting a header. See accounts/middleware.py and deploy/apache/ for the
     corresponding proxy configuration.
 
-    Users are provisioned on first sight but deliberately created inactive for
-    the admin: Shibboleth asserts *who* someone is, never that they are allowed
-    to edit stock. Granting staff/permissions stays a manual act.
+    Accounts are never created here. An eppn with no account authenticates as
+    nobody, and the request continues anonymously.
+
+    That is a deliberate reversal of provisioning on first sight. Apache admits
+    anyone holding a CMU session, because the roster lives in Django rather than
+    in `Require shib-user` lines, so first sight is not a colleague arriving: it
+    is any of some tens of thousands of people who followed a link. Provisioning
+    them would accumulate rows that can never do anything, and worse, would let
+    them in: `_may_see_costs` in inventory/views.py turns on `is_authenticated`,
+    not on `is_staff`, so a bare account row is enough to reveal prices and
+    suppliers that the public views deliberately withhold.
+
+    Use `manage.py grant_staff` to create accounts. It is a manual act for the
+    same reason granting permissions is: Shibboleth asserts *who* someone is,
+    never that they have any business with the stock.
     """
 
     def authenticate(self, request, remote_user=None, attributes=None, **kwargs):
@@ -37,19 +49,8 @@ class TrustedHeaderBackend(BaseBackend):
         user = self._resolve(username, subject_id)
 
         if user is None:
-            user = User.objects.create(
-                username=username,
-                subject_id=subject_id,
-                idp="shib",
-                email=attributes.get("email", ""),
-                is_active=True,
-                is_staff=False,
-            )
-            # Unusable password: this account must never be able to sign in via
-            # the local login form, only through the SSO proxy.
-            user.set_unusable_password()
-            user.save(update_fields=["password"])
-            log.info("Provisioned user %s from SSO headers", username)
+            log.info("SSO asserted %s, which has no account here", username)
+            return None
 
         self._sync_attributes(user, attributes)
         return user
@@ -68,7 +69,9 @@ class TrustedHeaderBackend(BaseBackend):
                 if user.username != username:
                     log.info(
                         "eppn for subject %s changed: %s -> %s",
-                        subject_id, user.username, username,
+                        subject_id,
+                        user.username,
+                        username,
                     )
                     user.username = username
                     user.save(update_fields=["username"])
