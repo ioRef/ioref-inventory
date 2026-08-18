@@ -1,29 +1,39 @@
+---
 services:
   inventory:
     build: .
     ports:
-      - "${PORT:-8000}:8000"
-    env_file: .env
+      # Loopback only, deliberately. Under AUTH_MODE=shib the app trusts the
+      # identity headers Apache sets, so anything that can reach this port
+      # directly can authenticate as anyone by sending them. Apache proxies to
+      # 127.0.0.1:8000; nothing else needs to reach it. See
+      # deploy/apache/inventory.conf and accounts/backends.py.
+      - "127.0.0.1:${PORT:-8000}:8000"
+    env_file:
+      - "${ENV_FILE:-.env}"
     volumes:
       # Named volume, not a bind mount: SQLite on a bind mount across a host
       # filesystem boundary can see locking misbehave.
       - inventory-data:/app/data
     restart: unless-stopped
 
-  # Postgres is opt-in and off by default -- SQLite is the portable default.
+  # Optional Postgres
+  #
   #   docker compose --profile postgres up
-  # and set DATABASE_URL=postgres://ioref:ioref@db:5432/ioref
-  db:
+  #
+  # Set DATABASE_URL and POSTGRES_PASSWORD in the environment file when using
+  # this profile.
+  postgres:
     image: postgres:17-alpine
     profiles: [postgres]
     environment:
-      POSTGRES_USER: ioref
-      POSTGRES_PASSWORD: ioref
-      POSTGRES_DB: ioref
+      POSTGRES_USER: ${POSTGRES_USER:-ioref}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ioref}
+      POSTGRES_DB: ${POSTGRES_DB:-ioref}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ioref"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ioref}"]
       interval: 10s
       retries: 5
 
