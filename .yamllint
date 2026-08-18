@@ -1,0 +1,11 @@
+---
+extends: default
+ignore-from-file: .gitignore
+rules:
+  # compose.yaml opens with ---, the GitHub workflows do not. Requiring it
+  # would mean editing files GitHub's own templates generate without it.
+  document-start: disable
+  line-length: disable
+  truthy:
+    # `on:` in a workflow is a key, not the boolean true.
+    check-keys: false

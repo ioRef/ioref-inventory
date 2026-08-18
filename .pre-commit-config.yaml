@@ -1,0 +1,39 @@
+---
+# prek (pre-commit) hooks for ioref-inventory
+#
+#   prek install           once per clone, to run on commit
+#   prek run --all-files   manually, over everything
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+
+  # Lint first so its fixes are formatted, then format.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.3
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.3
+    hooks:
+      - id: codespell
+        # "Switchs" appears in import_directus._plural's docstring as an
+        # example of the wrong plural. Correcting it would delete the point.
+        args: [--ignore-words-list=switchs]
+        exclude: ^uv\.lock$
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.38.0
+    hooks:
+      - id: yamllint
