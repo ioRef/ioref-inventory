@@ -42,6 +42,7 @@ class User(AbstractUser):
     def __str__(self):
         return self.get_full_name() or self.username
 
+
 PREFIX_LENGTH = 8
 SECRET_BYTES = 32
 
@@ -106,7 +107,9 @@ class ApiKey(models.Model):
         return self.expires_at is None or self.expires_at > timezone.now()
 
     @classmethod
-    def generate(cls, name: str, scope: str = Scope.READ, **kwargs) -> tuple["ApiKey", str]:
+    def generate(
+        cls, name: str, scope: str = Scope.READ, **kwargs
+    ) -> tuple["ApiKey", str]:
         """Create a key, returning it alongside the plaintext token.
 
         The token is returned exactly once and is not recoverable afterwards.

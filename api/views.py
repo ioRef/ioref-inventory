@@ -1,4 +1,4 @@
-from django.db.models import Count, F, OuterRef, Prefetch, Q, Subquery, Value
+from django.db.models import Count, F, OuterRef, Prefetch, Subquery, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
@@ -45,7 +45,8 @@ class PartViewSet(viewsets.ModelViewSet):
         # properties, and Django applies annotations with setattr(), which cannot
         # write through a data descriptor. The properties read these back.
         queryset = (
-            Part.objects.select_related("location", "group").prefetch_related("tags")
+            Part.objects.select_related("location", "group")
+            .prefetch_related("tags")
             .annotate(
                 _ann_on_floor=_latest_quantity_subquery(StockEvent.Kind.INVENTORY),
                 _ann_in_backstock=_latest_quantity_subquery(StockEvent.Kind.BACKSTOCK),

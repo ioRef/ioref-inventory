@@ -5,15 +5,16 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('inventory', '0002_group_tag_alter_part_location_part_group_part_tags'),
+        ("inventory", "0002_group_tag_alter_part_location_part_group_part_tags"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='stockevent',
-            name='observed_at',
-            field=models.DateTimeField(default=django.utils.timezone.now, help_text='When the count was taken.'),
+            model_name="stockevent",
+            name="observed_at",
+            field=models.DateTimeField(
+                default=django.utils.timezone.now, help_text="When the count was taken."
+            ),
         ),
     ]

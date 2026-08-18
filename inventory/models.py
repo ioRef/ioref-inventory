@@ -164,7 +164,9 @@ class Part(models.Model):
         """
         if annotation in self.__dict__:
             return self.__dict__[annotation]
-        event = self.stock_events.filter(kind=kind).order_by("-observed_at", "-id").first()
+        event = (
+            self.stock_events.filter(kind=kind).order_by("-observed_at", "-id").first()
+        )
         return event.quantity if event else None
 
     @property
@@ -243,7 +245,9 @@ class StockEvent(models.Model):
         INVENTORY = "inventory", "On floor"
         BACKSTOCK = "backstock", "Backstock"
 
-    part = models.ForeignKey(Part, on_delete=models.CASCADE, related_name="stock_events")
+    part = models.ForeignKey(
+        Part, on_delete=models.CASCADE, related_name="stock_events"
+    )
     kind = models.CharField(max_length=16, choices=Kind.choices)
     quantity = models.PositiveIntegerField()
 

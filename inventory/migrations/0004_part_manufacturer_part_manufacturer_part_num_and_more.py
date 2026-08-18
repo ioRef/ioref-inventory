@@ -4,25 +4,24 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('inventory', '0003_alter_stockevent_observed_at'),
+        ("inventory", "0003_alter_stockevent_observed_at"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='part',
-            name='manufacturer',
-            field=models.CharField(blank=True, default='', max_length=200),
+            model_name="part",
+            name="manufacturer",
+            field=models.CharField(blank=True, default="", max_length=200),
         ),
         migrations.AddField(
-            model_name='part',
-            name='manufacturer_part_num',
-            field=models.CharField(blank=True, default='', max_length=128),
+            model_name="part",
+            name="manufacturer_part_num",
+            field=models.CharField(blank=True, default="", max_length=128),
         ),
         migrations.AlterField(
-            model_name='part',
-            name='status',
-            field=models.CharField(db_index=True, default='active', max_length=100),
+            model_name="part",
+            name="status",
+            field=models.CharField(db_index=True, default="active", max_length=100),
         ),
     ]

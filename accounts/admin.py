@@ -49,7 +49,14 @@ class GroupAdmin(BaseGroupAdmin, ModelAdmin):
 
 @admin.register(ApiKey)
 class ApiKeyAdmin(ModelAdmin):
-    list_display = ("name", "prefix", "scope", "is_active", "last_used_at", "expires_at")
+    list_display = (
+        "name",
+        "prefix",
+        "scope",
+        "is_active",
+        "last_used_at",
+        "expires_at",
+    )
     list_filter = ("scope", "is_active")
     readonly_fields = ("prefix", "hashed_key", "created_at", "last_used_at")
 

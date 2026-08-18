@@ -5,48 +5,82 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('inventory', '0001_initial'),
+        ("inventory", "0001_initial"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Group',
+            name="Group",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=100, unique=True)),
-                ('slug', models.SlugField(max_length=100, unique=True)),
-                ('description', models.TextField(blank=True)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=100, unique=True)),
+                ("slug", models.SlugField(max_length=100, unique=True)),
+                ("description", models.TextField(blank=True)),
             ],
             options={
-                'ordering': ('name',),
+                "ordering": ("name",),
             },
         ),
         migrations.CreateModel(
-            name='Tag',
+            name="Tag",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=100, unique=True)),
-                ('slug', models.SlugField(max_length=100, unique=True)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=100, unique=True)),
+                ("slug", models.SlugField(max_length=100, unique=True)),
             ],
             options={
-                'ordering': ('name',),
+                "ordering": ("name",),
             },
         ),
         migrations.AlterField(
-            model_name='part',
-            name='location',
-            field=models.ForeignKey(blank=True, help_text='Which bin it is in.', null=True, on_delete=django.db.models.deletion.PROTECT, related_name='parts', to='inventory.location'),
+            model_name="part",
+            name="location",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Which bin it is in.",
+                null=True,
+                on_delete=django.db.models.deletion.PROTECT,
+                related_name="parts",
+                to="inventory.location",
+            ),
         ),
         migrations.AddField(
-            model_name='part',
-            name='group',
-            field=models.ForeignKey(blank=True, help_text='What kind of part this is. Independent of where it sits.', null=True, on_delete=django.db.models.deletion.PROTECT, related_name='parts', to='inventory.group'),
+            model_name="part",
+            name="group",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="What kind of part this is. Independent of where it sits.",
+                null=True,
+                on_delete=django.db.models.deletion.PROTECT,
+                related_name="parts",
+                to="inventory.group",
+            ),
         ),
         migrations.AddField(
-            model_name='part',
-            name='tags',
-            field=models.ManyToManyField(blank=True, help_text="Cross-cutting facts that are not the part's type.", related_name='parts', to='inventory.tag'),
+            model_name="part",
+            name="tags",
+            field=models.ManyToManyField(
+                blank=True,
+                help_text="Cross-cutting facts that are not the part's type.",
+                related_name="parts",
+                to="inventory.tag",
+            ),
         ),
     ]

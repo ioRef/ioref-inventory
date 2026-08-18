@@ -72,7 +72,10 @@ class PartSerializer(serializers.ModelSerializer):
     """
 
     location = serializers.SlugRelatedField(
-        slug_field="code", queryset=Location.objects.all(), allow_null=True, required=False
+        slug_field="code",
+        queryset=Location.objects.all(),
+        allow_null=True,
+        required=False,
     )
     group = GroupSerializer(read_only=True)
     tags = serializers.SlugRelatedField(slug_field="slug", many=True, read_only=True)

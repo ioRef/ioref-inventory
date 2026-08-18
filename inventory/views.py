@@ -53,7 +53,8 @@ def part_list(request):
     # See CLAUDE.md: the annotations cannot be named on_floor/in_backstock,
     # which are read-only properties that setattr() cannot write through.
     parts = (
-        Part.objects.select_related("location", "group").prefetch_related("tags")
+        Part.objects.select_related("location", "group")
+        .prefetch_related("tags")
         .annotate(
             _ann_on_floor=_latest_quantity(StockEvent.Kind.INVENTORY),
             _ann_in_backstock=_latest_quantity(StockEvent.Kind.BACKSTOCK),
@@ -106,7 +107,8 @@ def part_detail(request, part_number):
     _browsable()
 
     part = get_object_or_404(
-        Part.objects.select_related("location", "group").prefetch_related("tags"), part_number=part_number
+        Part.objects.select_related("location", "group").prefetch_related("tags"),
+        part_number=part_number,
     )
     may_see_costs = _may_see_costs(request)
 
