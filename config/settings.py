@@ -85,7 +85,9 @@ TEMPLATES = [
 # Database -- SQLite by default for portability, per the brief.
 # ---------------------------------------------------------------------------
 DATABASES = {
-    "default": env.db_url("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'data' / 'db.sqlite3'}")
+    "default": env.db_url(
+        "DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'data' / 'db.sqlite3'}"
+    )
 }
 
 if DATABASES["default"]["ENGINE"].endswith("sqlite3"):
@@ -129,7 +131,9 @@ if AUTH_MODE == "shib":
 
 elif AUTH_MODE == "oidc":
     INSTALLED_APPS.append("mozilla_django_oidc")
-    AUTHENTICATION_BACKENDS.insert(0, "mozilla_django_oidc.auth.OIDCAuthenticationBackend")
+    AUTHENTICATION_BACKENDS.insert(
+        0, "mozilla_django_oidc.auth.OIDCAuthenticationBackend"
+    )
     OIDC_RP_CLIENT_ID = env("OIDC_RP_CLIENT_ID")
     OIDC_RP_CLIENT_SECRET = env("OIDC_RP_CLIENT_SECRET")
     OIDC_RP_SIGN_ALGO = env("OIDC_RP_SIGN_ALGO", default="RS256")
@@ -234,17 +238,23 @@ UNFOLD = {
                     {
                         "title": "Parts",
                         "icon": "memory",
-                        "link": lambda r: reverse_lazy("admin:inventory_part_changelist"),
+                        "link": lambda r: reverse_lazy(
+                            "admin:inventory_part_changelist"
+                        ),
                     },
                     {
                         "title": "Groups",
                         "icon": "category",
-                        "link": lambda r: reverse_lazy("admin:inventory_group_changelist"),
+                        "link": lambda r: reverse_lazy(
+                            "admin:inventory_group_changelist"
+                        ),
                     },
                     {
                         "title": "Tags",
                         "icon": "label",
-                        "link": lambda r: reverse_lazy("admin:inventory_tag_changelist"),
+                        "link": lambda r: reverse_lazy(
+                            "admin:inventory_tag_changelist"
+                        ),
                     },
                     {
                         "title": "Locations",
@@ -282,14 +292,18 @@ UNFOLD = {
                     {
                         "title": "API keys",
                         "icon": "key",
-                        "link": lambda r: reverse_lazy("admin:accounts_apikey_changelist"),
+                        "link": lambda r: reverse_lazy(
+                            "admin:accounts_apikey_changelist"
+                        ),
                         # Keys are a security control, not day-to-day stock work.
                         "permission": lambda r: r.user.is_superuser,
                     },
                     {
                         "title": "Users",
                         "icon": "person",
-                        "link": lambda r: reverse_lazy("admin:accounts_user_changelist"),
+                        "link": lambda r: reverse_lazy(
+                            "admin:accounts_user_changelist"
+                        ),
                         "permission": lambda r: r.user.is_superuser,
                     },
                 ],
@@ -324,9 +338,42 @@ REST_FRAMEWORK = {
 }
 
 # ---------------------------------------------------------------------------
+# Cookie names
+#
+# Distinct because the app may share a hostname with another application. Two
+# Django deployments on one host both default to sessionid and csrftoken; the
+# browser sends both on any request under the deeper path and neither can tell
+# which is its own. This is the one part of mounting under a path that the
+# proxy cannot solve, since it would have to rewrite Set-Cookie on the way out.
+# ---------------------------------------------------------------------------
+SESSION_COOKIE_NAME = env("SESSION_COOKIE_NAME", default="inventory_sessionid")
+CSRF_COOKIE_NAME = env("CSRF_COOKIE_NAME", default="inventory_csrftoken")
+
+# ---------------------------------------------------------------------------
+# Mount point
+#
+# Set SCRIPT_NAME in the environment when serving under a path rather than at
+# the root of a host. Empty is the default and the standalone case. gunicorn
+# reads the same variable, strips it from PATH_INFO and puts it in the WSGI
+# environ, which is all reverse() needs. Two things need it here as well:
+#
+# FORCE_SCRIPT_NAME, because WhiteNoise reads that setting rather than the WSGI
+# environ to work out which prefix to strip when matching a static request.
+#
+# STATIC_URL, because it must carry the prefix itself. Django resolves and
+# caches STATIC_URL on first access, which happens at startup with no request
+# in flight, so a relative value freezes as "/static/" and never picks up the
+# script name. {% static %} would then render links that the proxy routes to
+# whatever else is mounted at the root of the host.
+# ---------------------------------------------------------------------------
+SCRIPT_NAME = env("SCRIPT_NAME", default="").rstrip("/")
+if SCRIPT_NAME:
+    FORCE_SCRIPT_NAME = SCRIPT_NAME
+
+# ---------------------------------------------------------------------------
 # Static files / i18n
 # ---------------------------------------------------------------------------
-STATIC_URL = "static/"
+STATIC_URL = f"{SCRIPT_NAME}/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 # The manifest storage requires a collectstatic run to resolve {% static %}.
 # That is right for a deployment and wrong for the test suite, which would
