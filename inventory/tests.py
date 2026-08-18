@@ -541,3 +541,74 @@ class TagsForTests(SimpleTestCase):
         self.assertEqual(tags_for(""), [])
 
 
+class PartCountLinkTests(TestCase):
+    """The parts count in the group, tag and location lists is a way in.
+
+    Counting parts is only half of it: the number answers "how many" and the
+    link answers "which ones", which is the question someone browsing a group
+    listing actually has next.
+    """
+
+    def setUp(self):
+        self.client.force_login(
+            get_user_model().objects.create_superuser(
+                username="admin@andrew.cmu.edu", password="x"
+            )
+        )
+        self.group = Group.objects.create(name="Potentiometers", slug="potentiometers")
+        self.empty = Group.objects.create(name="Nothing here", slug="nothing-here")
+        self.tag = Tag.objects.create(name="soldering", slug="soldering")
+        self.location = Location.objects.create(code="B1-R1-C1")
+        for number in ("0390", "0386"):
+            part = Part.objects.create(
+                part_number=number,
+                short_name=f"pot {number}",
+                group=self.group,
+                location=self.location,
+            )
+            part.tags.add(self.tag)
+
+    def test_group_count_links_to_the_filtered_part_list(self):
+        response = self.client.get("/admin/inventory/group/")
+        # The whole anchor, not just the href: format_html output that got
+        # escaped would still contain the URL as text and read as passing.
+        self.assertContains(
+            response,
+            f'<a href="/admin/inventory/part/?group__id__exact={self.group.pk}">2</a>',
+            html=True,
+        )
+
+    def test_tag_and_location_counts_link_too(self):
+        self.assertContains(
+            self.client.get("/admin/inventory/tag/"),
+            f"/admin/inventory/part/?tags__id__exact={self.tag.pk}",
+        )
+        self.assertContains(
+            self.client.get("/admin/inventory/location/"),
+            f"/admin/inventory/part/?location__id__exact={self.location.pk}",
+        )
+
+    def test_the_link_actually_filters(self):
+        # The changelist rejects a lookup that is not in list_filter, so this
+        # asserts the pairing rather than just the href text.
+        response = self.client.get(
+            f"/admin/inventory/part/?group__id__exact={self.group.pk}"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["cl"].result_count, 2)
+
+    def test_an_empty_group_is_not_a_link(self):
+        response = self.client.get("/admin/inventory/group/")
+        self.assertNotContains(
+            response, f"/admin/inventory/part/?group__id__exact={self.empty.pk}"
+        )
+
+    def test_counting_does_not_cost_a_query_per_row(self):
+        for n in range(12):
+            Group.objects.create(name=f"Group {n}", slug=f"group-{n}")
+        # Session, user, the changelist's two counts, and one for the page of
+        # groups with their part counts annotated on. The number matters less
+        # than the fact that it does not grow with the number of rows: counting
+        # per row would make this 5 + 14.
+        with self.assertNumQueries(5):
+            self.client.get("/admin/inventory/group/")

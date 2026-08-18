@@ -1,7 +1,9 @@
 from django import forms
 from django.contrib import admin
-from django.db.models import OuterRef, Subquery
+from django.db.models import Count, OuterRef, Subquery
+from django.urls import reverse
 from django.utils.html import format_html, format_html_join
+from django.utils.http import urlencode
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.contrib.filters.admin import RangeDateFilter
 from unfold.widgets import UnfoldAdminTextInputWidget
@@ -15,6 +17,36 @@ def _latest_quantity(kind):
         .order_by("-observed_at", "-id")
         .values("quantity")[:1]
     )
+
+
+class PartCountColumn:
+    """A parts count that opens the part list already filtered to that row.
+
+    Counting the reverse relation per row costs one query per row, because
+    list_display calls the display method once per object. The count is
+    annotated instead, under the `_ann_` prefix the rest of this module uses.
+
+    The lookup each subclass names has to be one PartAdmin will accept: the
+    changelist rejects a filter that is not in its list_filter, so `group`,
+    `tags` and `location` work and anything else would 400.
+    """
+
+    #: Query parameter on the part changelist that filters to one of these.
+    parts_lookup = None
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(_ann_parts=Count("parts"))
+
+    @admin.display(description="Parts", ordering="_ann_parts")
+    def part_count(self, obj):
+        count = obj._ann_parts
+        if not count:
+            # An empty group is a real state worth seeing, but a link to an
+            # empty list is a dead end, so it stays plain text.
+            return count
+        url = reverse("admin:inventory_part_changelist")
+        query = urlencode({self.parts_lookup: obj.pk})
+        return format_html('<a href="{}?{}">{}</a>', url, query, count)
 
 
 class StockEventInline(TabularInline):
@@ -52,13 +84,19 @@ class StatusInput(UnfoldAdminTextInputWidget):
     """
 
     def render(self, name, value, attrs=None, renderer=None):
-        list_id = f"{attrs['id']}_suggestions" if attrs and attrs.get("id") else "status_suggestions"
+        list_id = (
+            f"{attrs['id']}_suggestions"
+            if attrs and attrs.get("id")
+            else "status_suggestions"
+        )
         attrs = {**(attrs or {}), "list": list_id}
         input_html = super().render(name, value, attrs, renderer)
         options = format_html_join(
-            "", "<option value=\"{}\">", ((choice,) for choice, _ in Part.Status.choices)
+            "", '<option value="{}">', ((choice,) for choice, _ in Part.Status.choices)
         )
-        return format_html('{}<datalist id="{}">{}</datalist>', input_html, list_id, options)
+        return format_html(
+            '{}<datalist id="{}">{}</datalist>', input_html, list_id, options
+        )
 
 
 class PartAdminForm(forms.ModelForm):
@@ -149,14 +187,11 @@ class PartAdmin(ModelAdmin):
 
 
 @admin.register(Location)
-class LocationAdmin(ModelAdmin):
+class LocationAdmin(PartCountColumn, ModelAdmin):
+    parts_lookup = "location__id__exact"
     list_display = ("code", "name", "is_active", "part_count")
     list_filter = ("is_active",)
     search_fields = ("code", "name")
-
-    @admin.display(description="Parts")
-    def part_count(self, location):
-        return location.parts.count()
 
 
 @admin.register(StockEvent)
@@ -178,22 +213,16 @@ class PriceObservationAdmin(ModelAdmin):
 
 
 @admin.register(Group)
-class GroupAdmin(ModelAdmin):
+class GroupAdmin(PartCountColumn, ModelAdmin):
+    parts_lookup = "group__id__exact"
     list_display = ("name", "slug", "part_count")
     search_fields = ("name", "slug")
     prepopulated_fields = {"slug": ("name",)}
-
-    @admin.display(description="Parts")
-    def part_count(self, group):
-        return group.parts.count()
 
 
 @admin.register(Tag)
-class TagAdmin(ModelAdmin):
+class TagAdmin(PartCountColumn, ModelAdmin):
+    parts_lookup = "tags__id__exact"
     list_display = ("name", "slug", "part_count")
     search_fields = ("name", "slug")
     prepopulated_fields = {"slug": ("name",)}
-
-    @admin.display(description="Parts")
-    def part_count(self, tag):
-        return tag.parts.count()
