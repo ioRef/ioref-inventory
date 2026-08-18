@@ -23,23 +23,37 @@ class UserAdmin(BaseUserAdmin, ModelAdmin):
     list_filter = BaseUserAdmin.list_filter + ("idp",)
     search_fields = ("username", "first_name", "last_name", "email", "subject_id")
 
-    # Appended rather than rewritten so upstream changes to the stock fieldsets
-    # are inherited instead of silently dropped.
-    fieldsets = BaseUserAdmin.fieldsets + (
-        (
-            "Identity provider",
-            {
+    readonly_fields = ("subject_id", "idp")
+
+    def get_fieldsets(self, request, obj=None):
+        """Append an identity section, showing subject_id only when there is one.
+
+        Appended rather than rewritten so upstream changes to the stock
+        fieldsets are inherited instead of silently dropped.
+
+        Not every IdP releases a permanent identifier, and where none does the
+        field is empty on every account forever. An always-blank field with a
+        paragraph of explanation attached asks a question of whoever reads it
+        that the page cannot answer, so it appears only once populated.
+        """
+        fieldsets = super().get_fieldsets(request, obj)
+        if obj is None:
+            return fieldsets
+
+        if obj.subject_id:
+            section = {
                 "fields": ("subject_id", "idp"),
                 "description": (
-                    "Username holds the eppn (user@andrew.cmu.edu). subject_id "
-                    "is the IdP's permanent identifier where one is released, "
-                    "and takes precedence over the eppn when matching an "
-                    "existing account at login."
+                    "subject_id is the identity provider's permanent "
+                    "identifier. It takes precedence over the username when "
+                    "matching an account at login, so a rename follows the "
+                    "person."
                 ),
-            },
-        ),
-    )
-    readonly_fields = ("subject_id", "idp")
+            }
+        else:
+            section = {"fields": ("idp",)}
+
+        return fieldsets + (("Identity provider", section),)
 
 
 @admin.register(Group)

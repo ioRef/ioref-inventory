@@ -123,6 +123,7 @@ if AUTH_MODE == "shib":
     REMOTE_USER_HEADER = env("REMOTE_USER_HEADER")
     REMOTE_USER_EMAIL_HEADER = env("REMOTE_USER_EMAIL_HEADER")
     REMOTE_USER_NAME_HEADER = env("REMOTE_USER_NAME_HEADER")
+    REMOTE_USER_SUBJECT_HEADER = env("REMOTE_USER_SUBJECT_HEADER")
     MIDDLEWARE.append("accounts.middleware.HeaderAuthenticationMiddleware")
     AUTHENTICATION_BACKENDS.insert(0, "accounts.backends.TrustedHeaderBackend")
 

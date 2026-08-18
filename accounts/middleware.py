@@ -65,13 +65,21 @@ class HeaderAuthenticationMiddleware:
             # adopting the new identity.
             auth.logout(request)
 
+        # Guarded rather than read straight through: META.get("") returns the
+        # empty string just as a missing header does, so an unconfigured header
+        # name is indistinguishable from an IdP that releases no subject id.
+        # That is how this silently degraded to eppn-only matching once before.
+        subject_id = (
+            request.META.get(self.subject_header, "") if self.subject_header else ""
+        )
+
         user = auth.authenticate(
             request,
             remote_user=username,
             attributes={
                 "email": request.META.get(self.email_header, ""),
                 "display_name": request.META.get(self.name_header, ""),
-                "subject_id": request.META.get(self.subject_header, ""),
+                "subject_id": subject_id,
             },
         )
 

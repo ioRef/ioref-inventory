@@ -1,9 +1,11 @@
+import os
 from io import StringIO
+from unittest import mock
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from accounts.backends import TrustedHeaderBackend
 
@@ -243,3 +245,32 @@ class GrantStaffCommandTests(TestCase):
         _, err = self.run_command("merichar")
         self.assertIn("not an eppn", err)
         self.assertEqual(User.objects.count(), 0)
+
+
+class ShibSettingsTests(SimpleTestCase):
+    """AUTH_MODE=shib must assign every header name the middleware reads.
+
+    REMOTE_USER_SUBJECT_HEADER was declared in the env schema and documented in
+    .env.example but never assigned as a setting, so the middleware's getattr
+    fell back to the empty string and the subject id was dropped in production.
+    Nothing failed: the app authenticates on eppn alone, and only a rename or a
+    recycled eppn would have exposed it.
+
+    The settings module is re-executed rather than reloaded, because reloading
+    it would rebind the live settings the rest of the suite is running under.
+    """
+
+    def test_shib_mode_assigns_every_header_setting(self):
+        path = settings.BASE_DIR / "config" / "settings.py"
+        namespace = {"__file__": str(path)}
+        with mock.patch.dict(os.environ, {"AUTH_MODE": "shib"}):
+            exec(compile(path.read_text(), str(path), "exec"), namespace)
+
+        self.assertEqual(namespace["AUTH_MODE"], "shib")
+        for name in (
+            "REMOTE_USER_HEADER",
+            "REMOTE_USER_EMAIL_HEADER",
+            "REMOTE_USER_NAME_HEADER",
+            "REMOTE_USER_SUBJECT_HEADER",
+        ):
+            self.assertIn(name, namespace, f"{name} is unset when AUTH_MODE=shib")
