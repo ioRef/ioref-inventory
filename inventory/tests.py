@@ -1,12 +1,17 @@
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
-from django.urls import reverse
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts.models import ApiKey
+from inventory.management.commands.import_directus import (
+    build_groups,
+    group_name,
+    head_noun,
+    tags_for,
+)
 from inventory.models import (
     Group,
     Location,
@@ -391,8 +396,10 @@ class GroupApiTests(TestCase):
         caps = Group.objects.create(name="Capacitors", slug="capacitors")
         touch = Tag.objects.create(name="touch", slug="touch")
 
-        pot = Part.objects.create(part_number="0390", short_name="pot", group=pots)
-        soft = Part.objects.create(part_number="0386", short_name="soft pot", group=pots)
+        Part.objects.create(part_number="0390", short_name="pot", group=pots)
+        soft = Part.objects.create(
+            part_number="0386", short_name="soft pot", group=pots
+        )
         soft.tags.add(touch)
         Part.objects.create(part_number="0054", short_name="cap", group=caps)
 
@@ -424,3 +431,113 @@ class GroupApiTests(TestCase):
 
     def test_tags_are_listable(self):
         self.assertEqual(self.client.get("/api/v1/tags/").data["count"], 1)
+
+
+class HeadNounTests(SimpleTestCase):
+    """The head-noun heuristic, which decides what group a part lands in.
+
+    Covered because the derivation is the least self-evident code here and two
+    of its lookup tables were unreachable before these tests existed.
+    """
+
+    def test_head_is_the_last_word(self):
+        self.assertEqual(head_noun("linear soft potentiometer"), "potentiometer")
+        self.assertEqual(head_noun("potentiometer knob"), "knob")
+
+    def test_trailing_numbers_and_units_are_walked_past(self):
+        self.assertEqual(head_noun("hookup wire 22awg"), "wire")
+
+    def test_parenthetical_quantities_are_dropped(self):
+        # Otherwise the head is "of", from "pack of 25".
+        self.assertEqual(head_noun("assorted needles (pack of 25)"), "needle")
+
+    def test_status_text_written_into_the_name_is_dropped(self):
+        self.assertEqual(
+            head_noun('1/2" tubing coupler OBSOLETED: USE PART 1533'), "coupler"
+        )
+
+    def test_trailing_modifiers_are_backed_off(self):
+        # A colour is never what a part is.
+        self.assertEqual(head_noun("stranded wire, yellow"), "wire")
+        self.assertEqual(head_noun("Thread, all purpose, spool, black"), "thread")
+
+    def test_collectives_are_walked_past(self):
+        self.assertEqual(head_noun("twisted wire pair"), "wire")
+        self.assertEqual(head_noun("DIP switch variety"), "switch")
+
+    def test_hyphens_bind(self):
+        # "Wi-Fi module" is not a "fi module".
+        self.assertEqual(head_noun("Wi-Fi module"), "wi-fi module")
+        self.assertEqual(head_noun("T-square"), "t-square")
+
+    def test_model_numbers_are_not_kinds(self):
+        # A part number names one product, not a class of them.
+        self.assertEqual(head_noun("Transistor (PN2222)"), "transistor")
+        # Backing off a model number lands on the previous segment, which is
+        # not always the kind: this one gives "roller" rather than
+        # "microswitch". The invariant is only that a model number never
+        # becomes a group.
+        self.assertNotIn("155", head_noun("microswitch, short roller, V-155-1C25"))
+
+    def test_generic_heads_take_their_qualifier(self):
+        self.assertEqual(head_noun("light sensor"), "light sensor")
+        self.assertEqual(head_noun("T18-D8 soldering iron tip"), "iron tip")
+
+    def test_a_bench_tool_is_not_an_office_supply(self):
+        # Both are "pen" on the head alone, which grouped them together.
+        self.assertNotEqual(head_noun("soldering flux pen"), head_noun("ballpoint pen"))
+
+    def test_a_name_with_no_head_returns_none(self):
+        self.assertIsNone(head_noun(""))
+        self.assertIsNone(head_noun("2"))
+
+
+class GroupNameTests(SimpleTestCase):
+    def test_acronyms_survive_capitalisation(self):
+        # Capitalising the assembled string used to undo this and give "Leds".
+        self.assertEqual(group_name("led"), "LEDs")
+        self.assertEqual(group_name("ir led"), "IR LEDs")
+
+    def test_plurals_do_not_read_as_typos(self):
+        self.assertEqual(group_name("switch"), "Switches")
+        self.assertEqual(group_name("lens"), "Lenses")
+        self.assertEqual(group_name("battery"), "Batteries")
+
+    def test_overrides_carry_conventional_spelling(self):
+        self.assertEqual(group_name("wifi module"), "Wi-Fi modules")
+
+    def test_multiword_heads_capitalise_once(self):
+        self.assertEqual(group_name("light sensor"), "Light sensors")
+
+
+class BuildGroupsTests(SimpleTestCase):
+    def test_a_head_used_once_is_not_a_group(self):
+        vocabulary = build_groups([{"name": "widget"}, {"name": "sprocket"}])
+        self.assertEqual(vocabulary, {})
+
+    def test_hyphenated_and_solid_spellings_share_a_group(self):
+        rows = [{"name": "arcade push-button"}, {"name": "pushbutton"}]
+        vocabulary = build_groups(rows)
+        # Both spellings resolve, and to the same heading.
+        self.assertEqual(vocabulary["push-button"], vocabulary["pushbutton"])
+
+
+class TagsForTests(SimpleTestCase):
+    """Both location shapes carry a use. Reading only one left 121 parts bare."""
+
+    def test_use_in_the_fine_half(self):
+        self.assertEqual(tags_for("Input: Touch"), ["touch"])
+
+    def test_use_as_the_whole_location(self):
+        self.assertEqual(tags_for("tool box"), ["tool box"])
+        self.assertEqual(tags_for("Lending"), ["lending"])
+
+    def test_soldering_bench_is_tagged_by_activity_not_furniture(self):
+        self.assertEqual(tags_for("Soldering Bench"), ["soldering"])
+
+    def test_an_ordinary_bin_carries_no_tag(self):
+        self.assertEqual(tags_for("Electrical Components: Resistors"), [])
+        self.assertEqual(tags_for("Hardware Drawer 3"), [])
+        self.assertEqual(tags_for(""), [])
+
+

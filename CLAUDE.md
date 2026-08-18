@@ -72,6 +72,65 @@ category a group sits under is the frontdoor's call. `Potentiometers`,
 `Capacitors`, `Diodes` would mean something to any organisation; `Input` only
 means something to a physical computing course.
 
+**Groups come from what a part is called, never from where it is kept.** A bin
+holds what is convenient to store together: the potentiometer drawer also has a
+joystick, an M2 screw and two knobs in it, and `Input: Light` and `Output: Light`
+are two shelves for sensors and emitters. Deriving a taxonomy from that gives
+confidently wrong answers -- an earlier version had one `Light` group of 66, so
+the photoresistor card listed every LED in the lab.
+
+`import_directus` takes the head noun of the part's own name, which in English
+compounds is the last word: a "linear soft potentiometer" is a potentiometer, a
+"potentiometer knob" is a knob. Three refinements matter:
+
+- **Trailing noise is stripped before the head is read.** Names carry
+  parenthetical quantities ("(pack of 25)"), status text ("OBSOLETED: USE PART
+  1533"), and comma-separated modifiers ("Thread, all purpose, spool, black").
+  Without this the heads were "of", "part" and "black". Modifiers are handled
+  by backing off a segment at a time until a head that names a kind appears.
+- **Trailing numbers and units are walked past.** "hookup wire 22awg" is a wire.
+- **Hyphens bind, and model numbers are rejected.** "Wi-Fi module" is not a "fi
+  module" and a "t-square" is not a "square"; anything carrying a digit names
+  one product rather than a class, so "PN2222" and "V-155-1C25" are not groups.
+  Where both spellings occur, the hyphenated head folds into the solid one, so
+  "push-button" and "pushbutton" are one group rather than two.
+- **Generic heads take their qualifier with them.** "sensor" alone would collect
+  40 unrelated parts, so it backs off to the bigram: "Light sensors",
+  "Temperature sensors", "Distance sensors".
+- **A head used by one part is not a group.** There is nothing to collect, and
+  an empty field invites someone to fill it in where a wrong one does not.
+
+That yields 198 groups over 1,317 parts, with 194 left ungrouped. Groups exist
+to help curate ioref-web's component pages, so the test for a good one is
+"would a single maker card cover all of these" -- which is why `Potentiometers`
+legitimately includes slide and soft pots even though the card's prose describes
+rotation.
+
+`import_directus` writes `part_groups.json` beside the export; ioref-web reads
+it rather than re-deriving any of this.
+
+**Known limits.** A part whose name does not say what it is gets no group -- a
+photoresistor is a light sensor, but only a human knows that, so assigning it to
+`Light sensors` is curation. And the bigram backoff is not a parser: "Hall
+effect sensor" becomes "Effect sensors".
+
+**The vocabulary is pruned on import.** Because groups are derived, improving
+the derivation otherwise leaves the ones it no longer produces behind holding
+no parts, and an empty heading is still offered to whoever is browsing. The
+import deletes groups with no parts so that a re-run converges. Nothing but
+the import creates a `Group`, so there is nothing else to protect.
+
+**A use is a tag, not a group, and the bin is what knows it.** `Tag` carries
+`soldering`, `tool box`, `lending` and `touch`, taken from the location: 29
+parts sit in a bin called "soldering bench" and no rule over part names would
+ever collect them, because a soldering iron tip, a flux pen, a sponge and a
+pair of helping hands share no head noun. That is the point of the split:
+`?group=iron-tips` answers "what kind of thing", `?tag=soldering` answers "what
+is on that bench". The tag names the activity rather than the furniture.
+
+Note that the bin is honest rather than tidy: safety goggles and a water bottle
+live at the soldering bench too, and so carry the tag.
+
 **`Group` is singular, `Tag` is plural, and the distinction is load-bearing.**
 A part is one kind of thing, so `group` is a foreign key: that is what makes
 "every capacitor below minimum" and "which component page covers this part"
