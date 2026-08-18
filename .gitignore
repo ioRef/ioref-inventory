@@ -1,4 +1,7 @@
 .env
+# Any other environment file, so a production.env sitting in the tree cannot be
+# committed by accident. .env.example is not matched and stays tracked.
+*.env
 .venv/
 data/
 staticfiles/

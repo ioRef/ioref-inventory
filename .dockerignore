@@ -9,7 +9,11 @@ data/
 # Built on the host, for the host. The image runs its own `uv sync`.
 .venv/
 
+# Secrets, by the same argument as data/. `*.env` matters as much as `.env`:
+# a production.env kept in the tree would otherwise be published in the image,
+# and it holds SECRET_KEY.
 .env
+*.env
 .git/
 .github/
 .gitignore
