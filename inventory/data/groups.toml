@@ -309,7 +309,10 @@ slug = "resistor"
 
 [groups."Relays"]
 card = true
-parts = ["0502"]
+# A PowerSwitch Tail and a remote control switch are boxed mains relays. They
+# carry "switch" in their names, which put them under the switches the course
+# teaches, next to a tactile pushbutton.
+parts = ["0502", "1454", "8019"]
 
 [groups."Batteries"]
 card = true
@@ -341,6 +344,24 @@ slug = "wire"
 [groups."Hand tools"]
 within = "drivers"
 match = ["hex"]
+
+# ---------------------------------------------------------------------------
+# Mechanical
+#
+# "Couplers" and "Couplings" looked like one topic under two spellings. They
+# are three topics under two spellings: a tubing coupler joins hose, a shaft
+# coupler joins a motor to a driveshaft, and a stereo coupling joins two audio
+# cables. The split runs across both words rather than between them.
+# ---------------------------------------------------------------------------
+
+[groups."Shaft couplers"]
+parts = ["1874", "1880", "1888", "1890", "1892"]
+
+[groups."Fittings"]
+parts = ["1486", "1490"]
+
+[groups."Adapters"]
+parts = ["0944", "0948", "0950"]
 
 # ---------------------------------------------------------------------------
 # [rename]  derived head -> the name it should carry
@@ -432,6 +453,10 @@ glasses = "Safety gear"
 goggles = "Safety gear"
 
 microswitches = "Lever switches"
+# Arcade, panel-mount, latching and metal buttons are one thing you press. The
+# tactile pushbuttons stay apart: those are the 6mm parts that go in a
+# breadboard, and they have their own card.
+buttons = "Pushbuttons"
 servos = "Servo motors"
 knobs = "Potentiometers"
 pushbuttons = "Pushbuttons"
