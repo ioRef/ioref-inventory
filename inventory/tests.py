@@ -1,7 +1,9 @@
 from datetime import timedelta
 
+from django.contrib.admin import site
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import RequestFactory, TestCase, override_settings
+from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -498,3 +500,38 @@ class PartCountLinkTests(TestCase):
         # per row would make this 5 + 14.
         with self.assertNumQueries(5):
             self.client.get("/admin/inventory/group/")
+
+
+class PartDeletionTests(TestCase):
+    """Parts are not deletable, because their history cascades with them."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="admin@andrew.cmu.edu", password="x"
+        )
+        self.client.force_login(self.user)
+        self.part = Part.objects.create(part_number="0010", short_name="resistor")
+
+    def test_the_change_page_offers_no_delete(self):
+        response = self.client.get(
+            reverse("admin:inventory_part_change", args=[self.part.pk])
+        )
+        self.assertNotContains(
+            response, reverse("admin:inventory_part_delete", args=[self.part.pk])
+        )
+
+    def test_deleting_directly_is_refused(self):
+        """Not merely hidden. A superuser posting the URL is still refused."""
+        response = self.client.post(
+            reverse("admin:inventory_part_delete", args=[self.part.pk]),
+            {"post": "yes"},
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Part.objects.filter(pk=self.part.pk).exists())
+
+    def test_the_bulk_action_is_withdrawn(self):
+        """The more dangerous of the two: it takes no per-object confirmation."""
+        request = RequestFactory().get("/")
+        request.user = self.user
+        actions = site._registry[Part].get_actions(request)
+        self.assertNotIn("delete_selected", actions)

@@ -306,6 +306,16 @@ UNFOLD = {
                         ),
                         "permission": lambda r: r.user.is_superuser,
                     },
+                    # Django's auth.Group, which the index page lists under
+                    # "Authentication and Authorization". Named at length here
+                    # because the sidebar already has a "Groups" three items
+                    # up, and that one is a kind of part.
+                    {
+                        "title": "Permission groups",
+                        "icon": "shield_person",
+                        "link": lambda r: reverse_lazy("admin:auth_group_changelist"),
+                        "permission": lambda r: r.user.is_superuser,
+                    },
                 ],
             },
         ],

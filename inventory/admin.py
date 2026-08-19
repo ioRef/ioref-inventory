@@ -109,6 +109,22 @@ class PartAdminForm(forms.ModelForm):
 @admin.register(Part)
 class PartAdmin(ModelAdmin):
     form = PartAdminForm
+
+    def has_delete_permission(self, request, obj=None):
+        """A part is never deleted, by anyone.
+
+        StockEvent and PriceObservation cascade from Part, so deleting one row
+        here silently takes every count and price ever recorded against it. The
+        append-only history exists precisely so that a correction never
+        destroys what it corrects, and a delete button undoes that in a click.
+
+        Retiring a part is a status change: TO_DISCONTINUE, then DISCONTINUED.
+        The bin keeps its label and the history stays answerable.
+
+        Returning False also withdraws the bulk "delete selected" action, which
+        is the more dangerous of the two.
+        """
+        return False
     list_display = (
         "part_number",
         "short_name",
