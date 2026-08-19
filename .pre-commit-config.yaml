@@ -28,9 +28,6 @@ repos:
     rev: v2.4.3
     hooks:
       - id: codespell
-        # "Switchs" appears in import_directus._plural's docstring as an
-        # example of the wrong plural. Correcting it would delete the point.
-        args: [--ignore-words-list=switchs]
         exclude: ^uv\.lock$
 
   - repo: https://github.com/adrienverge/yamllint

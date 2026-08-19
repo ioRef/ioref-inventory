@@ -62,10 +62,11 @@ class ApiKeyQuerySet(models.QuerySet):
 class ApiKey(models.Model):
     """A shared secret identifying a calling service, not a person.
 
-    ioref-frontdoor holds one of these with READ scope. Keys are stored hashed:
-    the legacy app kept a live Directus token as a literal in app.js:7, committed
-    to git, so a repo leak was a data-store compromise. Here a database leak
-    yields only hashes, and the plaintext exists once at creation time.
+    ioref-frontdoor holds one of these with READ scope. Keys are stored hashed,
+    because the system this replaced kept a live access token as a literal in
+    its source, committed to git, which made a repo leak a data-store
+    compromise. Here a database leak yields only hashes, and the plaintext
+    exists once, at creation time.
 
     SHA-256 rather than a password hasher is deliberate. These are 32 bytes of
     CSPRNG output, so there is no dictionary to attack and no need to make

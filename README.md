@@ -25,7 +25,8 @@ docker compose up --build     # or containerised
 
 ## Data model
 
-Six tables, replacing the single 42-column Directus `parts` collection:
+Six tables, replacing the single 42-column `parts` collection of the system
+this succeeded:
 
 | Model | Purpose |
 |---|---|
@@ -120,8 +121,8 @@ Create one in the admin under **API keys**. The plaintext is displayed once at
 creation and never again; only a SHA-256 hash is stored. Give ioref-web
 a `read` key.
 
-> The legacy app kept a live Directus token as a literal in `app.js:7`,
-> committed to git. **Rotate that token at cutover.**
+> The system this replaced kept a live access token as a literal in its
+> source, committed to git. That is what these keys exist not to be.
 
 Scopes are `read` (safe methods only) and `write`.
 
@@ -184,11 +185,7 @@ uv run python manage.py test
 
 ## Still to do
 
-- Data migration from Directus (MySQL `phys_comp_prod`). Note the schema has
-  **both** an `Inventory` collection (append-only, the newer approach) and the
-  legacy `inventory_history` JSON. Which is authoritative needs settling against
-  real data before the migration is written.
 - Staff-facing count-entry form. The admin covers it, but a barcode-friendly
   single-field page is the actual daily workflow.
-- `parts.part_set` was a single FK in Directus, so a part could belong to only
-  one set. Should be many-to-many in ioref-web.
+- Part sets were a single foreign key in the old schema, so a part could belong
+  to only one. Should be many-to-many in ioref-web.

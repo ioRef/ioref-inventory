@@ -4,7 +4,8 @@ Rows and their counting history are taken from the legacy data.csv so the admin
 shows realistic shapes -- including the awkward ones: a part below its minimum,
 a part never counted, a discontinued part at zero, and empty bins.
 
-Not a migration. The real Directus import is a separate, still-unwritten job.
+Development only. Production data arrived by migration and is now edited
+through the admin.
 """
 
 import datetime
