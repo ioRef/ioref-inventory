@@ -1,4 +1,5 @@
 from datetime import timedelta
+from pathlib import Path
 
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, override_settings
@@ -8,8 +9,11 @@ from rest_framework.test import APIClient
 from accounts.models import ApiKey
 from inventory.management.commands.import_directus import (
     build_groups,
+    curate_vocabulary,
+    curated_claims,
     group_name,
     head_noun,
+    load_curation,
     tags_for,
 )
 from inventory.models import (
@@ -612,3 +616,96 @@ class PartCountLinkTests(TestCase):
         # per row would make this 5 + 14.
         with self.assertNumQueries(5):
             self.client.get("/admin/inventory/group/")
+
+
+class CurationTests(SimpleTestCase):
+    """The layer that lets a person overrule the parser.
+
+    Derivation is a naming rule, so it cannot know that "Couplings" and
+    "Couplers" are one topic, that a credenza is not a topic at all, or that
+    the single photoresistor is the most important entry in the catalogue.
+    """
+
+    VOCAB = {
+        "screw": "Screws",
+        "washer": "Washers",
+        "credenza": "Credenzas",
+        "supply": "Supplies",
+        "motor": "Motors",
+        "driver": "Drivers",
+    }
+
+    def test_merge_collapses_several_heads_onto_one_group(self):
+        curated = curate_vocabulary(
+            dict(self.VOCAB), {"merge": {"screws": "Fasteners", "washers": "Fasteners"}}
+        )
+        self.assertEqual(curated["screw"], "Fasteners")
+        self.assertEqual(curated["washer"], "Fasteners")
+
+    def test_rename_keeps_the_grouping_and_changes_the_name(self):
+        curated = curate_vocabulary(
+            dict(self.VOCAB), {"rename": {"supplies": "Power supplies"}}
+        )
+        self.assertEqual(curated["supply"], "Power supplies")
+
+    def test_drop_removes_the_head_entirely(self):
+        curated = curate_vocabulary(
+            dict(self.VOCAB), {"drop": {"heads": ["credenzas"]}}
+        )
+        self.assertNotIn("credenza", curated)
+
+    def test_curation_is_keyed_on_the_name_not_the_head_noun(self):
+        """ "Screws" is what the admin shows; "screw" is a parser detail."""
+        curated = curate_vocabulary(
+            dict(self.VOCAB), {"merge": {"SCREWS": "Fasteners"}}
+        )
+        self.assertEqual(curated["screw"], "Fasteners")
+
+    def test_no_curation_leaves_the_vocabulary_alone(self):
+        self.assertEqual(curate_vocabulary(dict(self.VOCAB), None), self.VOCAB)
+
+    def test_a_claim_overrides_the_derivation(self):
+        rows = [{"part_number": "0894", "name": "Light Emitting Diode (LED)"}]
+        claims = curated_claims(
+            rows, {"diode": "Diodes"}, {"groups": {"LEDs": {"parts": ["0894"]}}}
+        )
+        self.assertEqual(claims["0894"], "LEDs")
+
+    def test_within_stops_a_split_reaching_into_another_group(self):
+        """The reason `within` exists.
+
+        Matching "stepper" across the whole catalogue would put the stepper
+        motor *drivers* under Stepper motors, which is a different card and a
+        different shelf.
+        """
+        rows = [
+            {"part_number": "1894", "name": "stepper motor"},
+            {"part_number": "0476", "name": "stepper motor driver"},
+        ]
+        vocabulary = {"motor": "Motors", "driver": "Drivers"}
+        curation = {
+            "groups": {
+                "Stepper motors": {"within": "motors", "match": ["stepper"]},
+                "Stepper motor drivers": {"within": "drivers", "match": ["stepper"]},
+            }
+        }
+        claims = curated_claims(rows, vocabulary, curation)
+        self.assertEqual(claims["1894"], "Stepper motors")
+        self.assertEqual(claims["0476"], "Stepper motor drivers")
+
+    def test_an_entry_naming_no_parts_claims_none(self):
+        """Metadata-only entries must not empty the group they describe.
+
+        The four cards linking to n-f-c.xyz/c/<slug> carry a slug and nothing
+        else; the parts stay wherever the derivation put them.
+        """
+        rows = [{"part_number": "0001", "name": "50mO resistor"}]
+        claims = curated_claims(
+            rows,
+            {"resistor": "Resistors"},
+            {"groups": {"Resistors": {"slug": "resistor"}}},
+        )
+        self.assertEqual(claims, {})
+
+    def test_a_missing_curation_file_is_not_an_error(self):
+        self.assertIsNone(load_curation(Path("/nonexistent/groups.toml")))

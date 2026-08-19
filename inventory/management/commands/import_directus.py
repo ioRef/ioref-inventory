@@ -15,12 +15,14 @@ source rather than appended to, so a re-run converges rather than doubling up.
 import datetime
 import json
 import re
+import tomllib
 from collections import Counter
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.db.models import Count
 from django.utils import timezone
 from django.utils.text import slugify
 
@@ -401,6 +403,81 @@ def parse_money(raw):
     return value if value >= 0 else None
 
 
+CURATION_FILE = Path(__file__).resolve().parents[2] / "data" / "groups.toml"
+
+
+def load_curation(path):
+    """Read the curation file, or None where there is none.
+
+    Optional by design. The derivation stands on its own, and a deployment with
+    a different catalogue has no use for decisions made about this one.
+    """
+    if path is None or not path.exists():
+        return None
+    with path.open("rb") as fh:
+        return tomllib.load(fh)
+
+
+def curate_vocabulary(vocabulary, curation):
+    """Apply rename, merge and drop to the derived head -> name mapping.
+
+    Keyed on the derived name rather than the head noun, because the name is
+    what a person sees in the group list. "Screws" reads better than "screw",
+    and nobody curating this should have to know which one the parser produced.
+    """
+    if not curation:
+        return vocabulary
+
+    drop = {name.lower() for name in curation.get("drop", {}).get("heads", [])}
+    merge = {k.lower(): v for k, v in curation.get("merge", {}).items()}
+    rename = {k.lower(): v for k, v in curation.get("rename", {}).items()}
+
+    curated = {}
+    for head, name in vocabulary.items():
+        key = name.lower()
+        if key in drop:
+            continue
+        curated[head] = merge.get(key) or rename.get(key) or name
+    return curated
+
+
+def curated_claims(rows, vocabulary, curation):
+    """Map part_number -> group name for parts a [groups] entry names outright.
+
+    A claim wins over the derivation, which is how a part leaves the group its
+    head noun would have put it in: "Light Emitting Diode (LED)" is a diode by
+    the parser and an LED to everyone else.
+
+    `within` is matched against the *underived* vocabulary, so it still means
+    what it says after a merge has renamed the group out from under it. It is
+    also what stops "Stepper motors" claiming the stepper motor drivers.
+    """
+    claims = {}
+    if not curation:
+        return claims
+
+    for name, spec in curation.get("groups", {}).items():
+        for number in spec.get("parts", []):
+            claims[str(number)] = name
+
+        within = (spec.get("within") or "").lower()
+        patterns = [m.lower() for m in spec.get("match", [])]
+        if not within or not patterns:
+            continue
+
+        for row in rows:
+            number = (row.get("part_number") or "").strip()
+            if not number:
+                continue
+            head = head_noun(row.get("name"))
+            if head is None or vocabulary.get(head, "").lower() != within:
+                continue
+            if any(p in (row.get("name") or "").lower() for p in patterns):
+                claims[number] = name
+
+    return claims
+
+
 class Command(BaseCommand):
     help = "Import stock data from a Directus JSONL export."
 
@@ -408,6 +485,12 @@ class Command(BaseCommand):
         parser.add_argument("export_dir", type=Path)
         parser.add_argument(
             "--dry-run", action="store_true", help="Report without writing."
+        )
+        parser.add_argument(
+            "--groups",
+            type=Path,
+            default=CURATION_FILE,
+            help="Curation file for derived groups. Skipped when absent.",
         )
 
     @transaction.atomic
@@ -418,7 +501,11 @@ class Command(BaseCommand):
             raise CommandError(f"No parts.jsonl in {export}")
 
         rows = [json.loads(line) for line in parts_file.open(encoding="utf-8")]
-        vocabulary = build_groups(rows)
+        derived = build_groups(rows)
+        curation = load_curation(options["groups"])
+        claims = curated_claims(rows, derived, curation)
+        vocabulary = curate_vocabulary(derived, curation)
+        stated = (curation or {}).get("groups", {})
         stats = Counter()
         assigned = {}
         groups = {}
@@ -443,24 +530,19 @@ class Command(BaseCommand):
                 location, created = Location.objects.get_or_create(code=location_name)
                 stats["locations_created"] += int(created)
 
-            tag_names = tags_for(location_name)
-            head = head_noun(row.get("name"))
+            tag_names = list(tags_for(location_name))
+
+            name = claims.get(number)
+            if name is None:
+                head = head_noun(row.get("name"))
+                name = vocabulary.get(head) if head else None
+
             group = None
-            if head in vocabulary:
-                if head not in groups:
-                    name = vocabulary[head]
-                    group_row, _ = Group.objects.get_or_create(
-                        slug=slugify(name), defaults={"name": name}
-                    )
-                    # get_or_create matches on slug and leaves defaults alone
-                    # for a row that already exists, so a renamed heading would
-                    # never reach the database: "LEDs" slugifies to the "leds"
-                    # that "Leds" already claimed.
-                    if group_row.name != name:
-                        group_row.name = name
-                        group_row.save(update_fields=["name"])
-                    groups[head] = group_row
-                group = groups[head]
+            if name:
+                group = self._group(name, groups, stated)
+                # The card's label is a fact about the kind, not about the bin,
+                # so it belongs to every part in the group.
+                tag_names += stated.get(name, {}).get("tags", [])
             else:
                 stats["ungrouped"] += 1
 
@@ -499,27 +581,89 @@ class Command(BaseCommand):
             stats["price_observations"] += self._import_prices(part, row)
 
         if not options["dry_run"]:
-            # Written back beside the export so ioref-web can set a component
-            # page's inventory_group without duplicating these rules. Inventory
-            # owns the derivation; the frontdoor just reads the answer.
-            mapping = export / "part_groups.json"
-            mapping.write_text(json.dumps(assigned, indent=1, sort_keys=True))
-            self.stdout.write(f"wrote {mapping} ({len(assigned)} parts)")
-
             # The vocabulary is derived, so a re-run with improved derivation
             # leaves the groups it no longer produces behind, holding no parts.
             # Without this the import does not converge: correcting "Pens" into
             # "Iron tips" would keep both, and the empty one would still be
             # offered as a heading. Only groups the import owns are considered,
             # which is all of them -- nothing else creates a Group.
-            emptied = Group.objects.filter(parts__isnull=True)
-            stats["groups_pruned"] = emptied.count()
-            emptied.delete()
+            #
+            # min_size extends that to groups too small to be worth a page. A
+            # heading with two parts under it is not a topic, and an empty one
+            # invites someone to fill it in where a missing one does not.
+            # Stated groups are exempt however small: that is the point of
+            # stating them, since there is one photoresistor and it needs a
+            # page of its own.
+            min_size = (curation or {}).get("settings", {}).get("min_size", 1)
+            protected = {name.casefold() for name in stated}
+            thin = [
+                group.pk
+                for group in Group.objects.annotate(size=Count("parts"))
+                if group.size < min_size and group.name.casefold() not in protected
+            ]
+            stats["groups_pruned"] = len(thin)
+            Part.objects.filter(group__in=thin).update(group=None)
+            Group.objects.filter(pk__in=thin).delete()
+
+            # Written back beside the export so ioref-web can set a component
+            # page's inventory_group without duplicating these rules. Inventory
+            # owns the derivation; the frontdoor just reads the answer.
+            #
+            # Read back from the database rather than accumulated during the
+            # loop, so that pruning cannot leave the file pointing at a group
+            # that no longer exists.
+            assigned = dict(
+                Part.objects.filter(group__isnull=False)
+                .values_list("part_number", "group__slug")
+                .order_by("part_number")
+            )
+            mapping = export / "part_groups.json"
+            mapping.write_text(json.dumps(assigned, indent=1, sort_keys=True))
+            self.stdout.write(f"wrote {mapping} ({len(assigned)} parts)")
 
         self._report(stats, len(rows))
 
         if options["dry_run"]:
             transaction.set_rollback(True)
+
+    def _group(self, name, cache, stated):
+        """Resolve a group by display name, creating it once per run.
+
+        Cached on the name rather than the head noun, because several heads can
+        now land on one group and a curated group may have no head at all.
+
+        A stated group carrying only metadata, as the four cards that already
+        link to a class page do, must not clear what the derivation put there:
+        it names no parts, so it claims none, and the group keeps its own.
+        """
+        if name in cache:
+            return cache[name]
+
+        spec = stated.get(name, {})
+        slug = spec.get("slug") or slugify(name)
+
+        # By name before slug. A curated slug is usually a *change* to the slug
+        # of a group that already exists -- the four cards linking to
+        # n-f-c.xyz/c/<slug> want the singular the URL already uses -- and
+        # matching on slug alone would build a second row under a name the
+        # first one holds, which the unique constraint on name refuses.
+        group = Group.objects.filter(name=name).first()
+        if group is None:
+            # Matching on slug leaves defaults alone for a row that already
+            # exists, so a renamed heading would never otherwise reach the
+            # database: "LEDs" slugifies to the "leds" that "Leds" claimed.
+            group, _ = Group.objects.get_or_create(slug=slug, defaults={"name": name})
+
+        changed = []
+        if group.name != name:
+            group.name, _ = name, changed.append("name")
+        if group.slug != slug:
+            group.slug, _ = slug, changed.append("slug")
+        if changed:
+            group.save(update_fields=changed)
+
+        cache[name] = group
+        return group
 
     def _import_stock(self, part, row):
         # Rebuilt rather than appended to, so re-running converges. Safe because

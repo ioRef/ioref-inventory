@@ -3,7 +3,7 @@
 # committed by accident. .env.example is not matched and stays tracked.
 *.env
 .venv/
-data/
+/data/
 staticfiles/
 *.sqlite3
 *.sqlite3-wal

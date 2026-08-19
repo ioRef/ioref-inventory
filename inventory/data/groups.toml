@@ -1,0 +1,479 @@
+# Curation for derived groups.
+#
+# `import_directus` derives a group from the head noun of a part's own name.
+# That works for the commodity tail, where the catalogue holds fifty of a
+# thing, and fails for the teaching vocabulary, where it holds one. There is a
+# single photoresistor in the lab and it is among the most-explained parts in
+# the course; there are fifty washers and nobody will ever write that card.
+#
+# So the derivation proposes and this file disposes:
+#
+#   [groups]  groups stated outright, either because a card explains them or
+#             because a derived head lumps distinct topics together.
+#   [rename]  derived heads whose grouping is right but whose name reads badly.
+#   [merge]   derived heads that are one topic under two words, or a
+#             distinction too fine to be worth a page of its own.
+#   [drop]    derived heads that name no topic at all.
+#
+# A [groups] entry selects parts three ways, and they combine:
+#
+#   parts   explicit part numbers.
+#   within  the derived head to take parts from. Load-bearing: it stops
+#           "Stepper motors" swallowing the stepper motor *drivers*.
+#   match   case-insensitive substrings of the part name, applied within.
+#
+# `card = true` records that a maker card already explains this, from
+# "ioRef MakerCards 1.26.22.pdf". Those groups exist however few parts carry
+# the name. `tags` is the coloured label from the back of the card, which is
+# cross-cutting and multi-valued, hence a tag rather than part of the name.
+#
+# Nothing here is required. A deployment with its own catalogue and no cards
+# can delete this file and get the derivation alone.
+
+# ---------------------------------------------------------------------------
+# Movement
+# ---------------------------------------------------------------------------
+
+[groups."Stepper motors"]
+card = true
+tags = ["movement"]
+within = "motors"
+match = ["stepper"]
+
+[groups."Servo motors"]
+card = true
+tags = ["movement"]
+within = "motors"
+match = ["servo"]
+
+[groups."DC motors"]
+card = true
+tags = ["movement"]
+within = "motors"
+match = ["dc motor", "gear motor", "gearhead", "geared motor", "wheel motor"]
+
+[groups."Vibration motors"]
+card = true
+tags = ["movement"]
+within = "motors"
+match = ["vibration"]
+
+[groups."Stepper motor drivers"]
+card = true
+tags = ["movement"]
+within = "drivers"
+match = ["stepper"]
+
+[groups."H-bridge motor drivers"]
+card = true
+tags = ["movement"]
+within = "drivers"
+match = ["h bridge", "h-bridge", "dual motor"]
+
+[groups."Servo drivers"]
+within = "drivers"
+match = ["servo"]
+
+[groups."LED drivers"]
+within = "drivers"
+match = ["led"]
+
+# ---------------------------------------------------------------------------
+# Light and sound
+# ---------------------------------------------------------------------------
+
+[groups."LEDs"]
+card = true
+tags = ["light"]
+parts = ["0894"]
+
+[groups."LCD displays"]
+card = true
+tags = ["visual"]
+parts = ["4001"]
+
+[groups."Infrared remotes"]
+card = true
+tags = ["light"]
+parts = ["4006"]
+
+[groups."Infrared receivers"]
+card = true
+tags = ["light"]
+signal = "continuous"
+parts = ["0251"]
+
+# The emitter and its detector are a matched pair used together in break-beam
+# and reflectance sensing, so they are one explanation rather than two.
+[groups."Infrared emitters and detectors"]
+parts = ["0248", "0249", "0250"]
+
+[groups."Active buzzers"]
+card = true
+tags = ["sound"]
+parts = ["0498"]
+
+[groups."Passive buzzers"]
+card = true
+tags = ["sound"]
+parts = ["0496"]
+
+# Cards 0496 and 0498 link to each other's part: the card titled "Active
+# Buzzer" points at the part named "Passive Buzzer" and vice versa. The
+# inventory is treated as correct and the cards are to be corrected, so the
+# numbers above are crossed relative to the PDF on purpose.
+
+[groups."Sound sensors"]
+tags = ["sensor"]
+within = "detectors"
+match = ["sound"]
+
+# ---------------------------------------------------------------------------
+# Sensing
+#
+# These stay split however few parts carry each name. What a light sensor is
+# for has nothing to say about what a pressure sensor is for, and one page
+# covering both would explain neither. The shared `sensor` tag is what answers
+# "what can I sense", which is the question the split would otherwise lose.
+# ---------------------------------------------------------------------------
+
+[groups."Light sensors"]
+tags = ["sensor", "light"]
+signal = "continuous"
+
+[groups."Distance sensors"]
+tags = ["sensor", "proximity"]
+signal = "continuous"
+
+[groups."Touch sensors"]
+tags = ["sensor", "position"]
+
+[groups."Temperature sensors"]
+tags = ["sensor", "temperature"]
+signal = "continuous"
+
+[groups."Breakbeam sensors"]
+tags = ["sensor", "proximity"]
+
+[groups."Optical sensors"]
+tags = ["sensor", "light"]
+
+[groups."Pressure sensors"]
+tags = ["sensor"]
+
+[groups."Pulse sensors"]
+tags = ["sensor"]
+
+[groups."Hall effect sensors"]
+tags = ["sensor"]
+
+[groups."Gyroscopes"]
+tags = ["sensor", "orientation"]
+
+[groups."Accelerometers"]
+card = true
+tags = ["sensor", "acceleration", "orientation"]
+signal = "continuous"
+parts = ["0368"]
+
+[groups."Ultrasonic rangefinders"]
+card = true
+tags = ["sensor", "proximity"]
+signal = "continuous"
+parts = ["0572"]
+
+[groups."Proximity sensors"]
+card = true
+tags = ["sensor", "proximity"]
+signal = "continuous"
+parts = ["0236"]
+
+[groups."Motion sensors"]
+tags = ["sensor"]
+within = "detectors"
+match = ["motion"]
+
+[groups."Photoresistors"]
+card = true
+tags = ["sensor", "light"]
+signal = "continuous"
+parts = ["0260"]
+
+[groups."Thermistors"]
+card = true
+tags = ["sensor", "temperature"]
+signal = "continuous"
+parts = ["0270"]
+
+[groups."Temperature and humidity sensors"]
+card = true
+tags = ["sensor", "temperature", "humidity"]
+signal = "continuous"
+parts = ["0268"]
+
+# ---------------------------------------------------------------------------
+# Switches and controls
+#
+# The derived `switches` head covers a dozen mechanisms that behave and are
+# wired differently. Each of these is a distinct explanation.
+# ---------------------------------------------------------------------------
+
+[groups."Slide switches"]
+tags = ["position"]
+signal = "binary"
+within = "switches"
+match = ["slide"]
+
+[groups."Toggle switches"]
+tags = ["position"]
+signal = "binary"
+within = "switches"
+match = ["toggle", "rocker"]
+
+[groups."DIP switches"]
+tags = ["position"]
+signal = "binary"
+within = "switches"
+match = ["dip switch"]
+
+[groups."Rotary switches"]
+tags = ["position"]
+signal = "binary"
+within = "switches"
+match = ["rotary"]
+
+[groups."Magnetic switches"]
+tags = ["position"]
+signal = "binary"
+within = "switches"
+match = ["reed", "magnetic"]
+
+[groups."Tilt switches"]
+card = true
+tags = ["position"]
+signal = "binary"
+within = "switches"
+match = ["tilt"]
+
+[groups."Lever switches"]
+card = true
+tags = ["position"]
+signal = "binary"
+within = "switches"
+match = ["lever"]
+
+[groups."Tactile pushbuttons"]
+card = true
+tags = ["position"]
+signal = "binary"
+within = "switches"
+match = ["tactile", "pushbutton switch"]
+
+[groups."Pushbuttons"]
+card = true
+tags = ["position"]
+signal = "binary"
+parts = ["2461"]
+
+[groups."Joysticks"]
+card = true
+tags = ["movement", "position"]
+signal = "binary"
+parts = ["0372"]
+
+[groups."Potentiometers"]
+card = true
+signal = "continuous"
+parts = ["0390"]
+
+# ---------------------------------------------------------------------------
+# Power and logic
+# ---------------------------------------------------------------------------
+
+[groups."Shift registers"]
+card = true
+tags = ["power"]
+parts = ["4008"]
+
+[groups."Diodes"]
+card = true
+parts = ["4007"]
+
+[groups."Transistors"]
+card = true
+slug = "transistor"
+
+[groups."Resistors"]
+card = true
+slug = "resistor"
+
+[groups."Relays"]
+card = true
+parts = ["0502"]
+
+[groups."Batteries"]
+card = true
+parts = ["0892"]
+
+[groups."Power supplies"]
+card = true
+parts = ["4003"]
+
+# ---------------------------------------------------------------------------
+# Boards and connection
+# ---------------------------------------------------------------------------
+
+[groups."Microcontroller boards"]
+card = true
+parts = ["1000"]
+
+[groups."Breadboards"]
+card = true
+slug = "breadboard"
+parts = ["4002"]
+
+[groups."Wires"]
+card = true
+slug = "wire"
+
+# Hex drivers are hand tools that happen to share a head noun with the motor
+# drivers above.
+[groups."Hand tools"]
+within = "drivers"
+match = ["hex"]
+
+# ---------------------------------------------------------------------------
+# [rename]  derived head -> the name it should carry
+# ---------------------------------------------------------------------------
+
+[rename]
+supplies   = "Power supplies"
+guns       = "Glue guns"
+sticks     = "Glue sticks"
+tags       = "RFID tags"
+shrinks    = "Heat shrink tubing"
+matrixes   = "LED matrices"
+knifes     = "Knives"
+openbeams  = "OpenBeam"
+housings   = "Connector housings"
+files      = "Hand files"
+rings      = "NeoPixel rings"
+discs      = "LED discs"
+cells      = "Load cells"
+gates      = "Logic gates"
+registers  = "Shift registers"
+timers     = "555 timers"
+arrays     = "Transistor arrays"
+bits       = "Driver bits"
+alarms     = "LiPo alarms"
+
+# ---------------------------------------------------------------------------
+# [merge]  derived head -> the group that absorbs it
+#
+# The mechanical and shop side collapses hard, because the emphasis of the
+# guides is electronics. Fasteners is one page covering roughly two hundred
+# parts; nobody needs a separate explanation of a locknut.
+# ---------------------------------------------------------------------------
+
+[merge]
+screws = "Fasteners"
+bolts = "Fasteners"
+nuts = "Fasteners"
+washers = "Fasteners"
+locknuts = "Fasteners"
+standoffs = "Fasteners"
+spacers = "Fasteners"
+rods = "Fasteners"
+fasteners = "Fasteners"
+
+pliers = "Hand tools"
+cutters = "Hand tools"
+screwdrivers = "Hand tools"
+knifes = "Hand tools"
+scissors = "Hand tools"
+clamps = "Hand tools"
+hammers = "Hand tools"
+tweezers = "Hand tools"
+vises = "Hand tools"
+punches = "Hand tools"
+rulers = "Hand tools"
+"t-squares" = "Hand tools"
+blades = "Hand tools"
+files = "Hand tools"
+mats = "Hand tools"
+brushes = "Hand tools"
+tools = "Hand tools"
+
+woods = "Craft materials"
+clays = "Craft materials"
+papers = "Craft materials"
+chipboards = "Craft materials"
+felts = "Craft materials"
+foils = "Craft materials"
+chalks = "Craft materials"
+beads = "Craft materials"
+straws = "Craft materials"
+bands = "Craft materials"
+ropes = "Craft materials"
+strings = "Craft materials"
+
+"iron tips" = "Soldering supplies"
+solders = "Soldering supplies"
+sponges = "Soldering supplies"
+stands = "Soldering supplies"
+
+microcontrollers = "Microcontroller boards"
+micros = "Microcontroller boards"
+unos = "Microcontroller boards"
+teensies = "Microcontroller boards"
+"arduino kits" = "Microcontroller boards"
+
+glasses = "Safety gear"
+goggles = "Safety gear"
+
+microswitches = "Lever switches"
+servos = "Servo motors"
+knobs = "Potentiometers"
+pushbuttons = "Pushbuttons"
+cords = "Cables"
+leads = "Cables"
+emitters = "Infrared emitters and detectors"
+"effect sensors" = "Hall effect sensors"
+
+# ---------------------------------------------------------------------------
+# [drop]  heads that name no topic
+#
+# Storage furniture is not a part anyone needs explained, and the rest are
+# artefacts of the derivation reading a specification as a kind.
+# ---------------------------------------------------------------------------
+
+[drop]
+heads = [
+  "drivers",
+  "credenzas",
+  "drawers",
+  "bins",
+  "containers",
+  "units",
+  "diameters",
+  "entries",
+  "shafts",
+  "metals",
+  "plastics",
+  "threads",
+  "boards",
+  "pads",
+  "monitors",
+]
+
+# ---------------------------------------------------------------------------
+# [settings]
+#
+# A group nobody will write a page about is worse than no group: an empty
+# heading invites someone to fill it in, where an absent one does not. Groups
+# stated above are exempt however small, which is the whole point of stating
+# them -- there is one photoresistor and it needs a page.
+# ---------------------------------------------------------------------------
+
+[settings]
+min_size = 3
