@@ -85,7 +85,7 @@ class Part(models.Model):
 
     Deliberately excludes guide/documentation content. The legacy `parts`
     collection fused stock-keeping with maker-card write-ups (7 docs_* fields,
-    categories, images); those live in ioref-frontdoor and join to this table on
+    categories, images); those live in ioref-web and join to this table on
     `part_number`. Keeping them out is what makes this app deployable by another
     org that has its own parts and no interest in ours.
     """

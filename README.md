@@ -155,7 +155,7 @@ record who counted them.
 > **`AUTH_MODE=shib` is only safe behind a proxy that overwrites the identity
 > headers on every request.** The app trusts them completely. If it is reachable
 > without going through that proxy, anyone can authenticate as anyone by setting
-> a header. See `deploy/apache/inventory.conf`.
+> a header. See the deployment section of `CLAUDE.md`.
 
 ## Admin theme
 

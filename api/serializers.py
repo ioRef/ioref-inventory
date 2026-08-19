@@ -64,7 +64,7 @@ class PriceObservationSerializer(serializers.ModelSerializer):
 
 
 class PartSerializer(serializers.ModelSerializer):
-    """The read shape ioref-frontdoor consumes.
+    """The read shape ioref-web consumes.
 
     Stock figures are flattened onto the part because the frontdoor's job is to
     answer "can I get one of these right now" -- it should not have to fetch and

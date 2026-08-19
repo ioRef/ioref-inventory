@@ -29,7 +29,7 @@ def _latest_quantity_subquery(kind):
 class PartViewSet(viewsets.ModelViewSet):
     """Parts, addressed by part_number rather than surrogate id.
 
-    part_number is the key ioref-frontdoor already holds on its PartPage, so
+    part_number is the key ioref-web already holds on its PartPage, so
     exposing it as the URL segment means the frontdoor never has to keep a
     mapping table of our primary keys.
     """
@@ -74,7 +74,7 @@ class PartViewSet(viewsets.ModelViewSet):
 
         if (numbers := params.get("part_number__in")) is not None:
             # Bulk lookup for consumers that group several stocked parts under
-            # one heading -- ioref-frontdoor's component pages do, and the
+            # one heading -- ioref-web's component pages do, and the
             # ceramic capacitors run to 33 part numbers. Without this the page
             # would issue one request per part.
             wanted = [n.strip() for n in numbers.split(",") if n.strip()]

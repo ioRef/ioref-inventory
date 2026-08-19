@@ -62,7 +62,7 @@ class ApiKeyQuerySet(models.QuerySet):
 class ApiKey(models.Model):
     """A shared secret identifying a calling service, not a person.
 
-    ioref-frontdoor holds one of these with READ scope. Keys are stored hashed,
+    ioref-web holds one of these with READ scope. Keys are stored hashed,
     because the system this replaced kept a live access token as a literal in
     its source, committed to git, which made a repo leak a data-store
     compromise. Here a database leak yields only hashes, and the plaintext

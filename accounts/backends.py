@@ -17,8 +17,8 @@ class TrustedHeaderBackend(BaseBackend):
     proxy in front of the app unconditionally *overwrites* these headers on every
     request -- including requests where the client supplied them. If the app is
     reachable other than through that proxy, anyone can authenticate as anyone by
-    setting a header. See accounts/middleware.py and deploy/apache/ for the
-    corresponding proxy configuration.
+    setting a header. See accounts/middleware.py, and the deployment section of
+    CLAUDE.md for what the proxy in front of this has to guarantee.
 
     Accounts are never created here. An eppn with no account authenticates as
     nobody, and the request continues anonymously.
