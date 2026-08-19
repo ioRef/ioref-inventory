@@ -257,6 +257,24 @@ class LocationAdmin(PartCountColumn, ModelAdmin):
     search_fields = ("code", "name")
 
 
+class AttributesToRecorder:
+    """Default recorded_by to whoever is filling the form in.
+
+    PartAdmin.save_formset already attributes rows added through the inlines.
+    These are the same records reached through their own add form, which is
+    where the "Record count" button sends people, so without this the history
+    loses who counted.
+
+    Offered as an initial value rather than forced in save_model, so someone
+    entering a backlog of counts taken on paper can still say whose they were.
+    """
+
+    def get_changeform_initial_data(self, request):
+        initial = super().get_changeform_initial_data(request)
+        initial.setdefault("recorded_by", request.user.pk)
+        return initial
+
+
 class ReturnsToPart:
     """Send the user back to the part they came from after adding a record.
 
@@ -274,7 +292,7 @@ class ReturnsToPart:
 
 
 @admin.register(StockEvent)
-class StockEventAdmin(ReturnsToPart, ModelAdmin):
+class StockEventAdmin(AttributesToRecorder, ReturnsToPart, ModelAdmin):
     list_display = ("part", "kind", "quantity", "observed_at", "recorded_by")
     list_filter = ("kind", ("observed_at", RangeDateFilter))
     search_fields = ("part__part_number", "part__short_name")
@@ -283,7 +301,7 @@ class StockEventAdmin(ReturnsToPart, ModelAdmin):
 
 
 @admin.register(PriceObservation)
-class PriceObservationAdmin(ReturnsToPart, ModelAdmin):
+class PriceObservationAdmin(AttributesToRecorder, ReturnsToPart, ModelAdmin):
     list_display = ("part", "price", "currency", "supplier", "observed_at")
     list_filter = ("currency", "supplier")
     search_fields = ("part__part_number", "part__short_name", "supplier")

@@ -565,6 +565,14 @@ class RecordFromPartTests(TestCase):
             target_status_code=200,
         )
 
+    def test_the_add_form_is_prefilled_with_the_logged_in_user(self):
+        response = self.client.get(
+            f"{reverse('admin:inventory_stockevent_add')}?part={self.part.pk}"
+        )
+        self.assertEqual(
+            response.context["adminform"].form.initial["recorded_by"], self.user.pk
+        )
+
     def test_saving_returns_to_the_part(self):
         """Otherwise a count recorded from a part lands on the event list."""
         add = reverse("admin:inventory_stockevent_add")
