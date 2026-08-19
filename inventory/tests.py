@@ -535,3 +535,86 @@ class PartDeletionTests(TestCase):
         request.user = self.user
         actions = site._registry[Part].get_actions(request)
         self.assertNotIn("delete_selected", actions)
+
+
+class RecordFromPartTests(TestCase):
+    """Recording a count or a price starts and ends on the part."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="admin@andrew.cmu.edu", password="x"
+        )
+        self.client.force_login(self.user)
+        self.part = Part.objects.create(part_number="0010", short_name="resistor")
+
+    def test_the_change_form_offers_both_buttons(self):
+        response = self.client.get(
+            reverse("admin:inventory_part_change", args=[self.part.pk])
+        )
+        titles = [a["title"] for a in response.context["actions_detail"]]
+        self.assertEqual(titles, ["Record count", "Record price"])
+
+    def test_the_button_opens_the_add_form_with_the_part_chosen(self):
+        response = self.client.get(
+            reverse("admin:inventory_part_record_count", args=[self.part.pk])
+        )
+        self.assertRedirects(
+            response,
+            f"{reverse('admin:inventory_stockevent_add')}"
+            f"?part={self.part.pk}&_part={self.part.pk}",
+            target_status_code=200,
+        )
+
+    def test_saving_returns_to_the_part(self):
+        """Otherwise a count recorded from a part lands on the event list."""
+        add = reverse("admin:inventory_stockevent_add")
+        response = self.client.post(
+            f"{add}?part={self.part.pk}&_part={self.part.pk}",
+            {
+                "part": self.part.pk,
+                "kind": StockEvent.Kind.INVENTORY,
+                "quantity": 12,
+                "observed_at_0": "2026-08-19",
+                "observed_at_1": "10:00:00",
+                "note": "",
+            },
+        )
+        self.assertRedirects(
+            response, reverse("admin:inventory_part_change", args=[self.part.pk])
+        )
+        self.assertEqual(self.part.stock_events.count(), 1)
+
+
+class PurchaseLinkTests(TestCase):
+    """Purchase links leave for a supplier, so they open in a new tab."""
+
+    def setUp(self):
+        self.part = Part.objects.create(part_number="0010", short_name="resistor")
+        PriceObservation.objects.create(
+            part=self.part,
+            price="1.25",
+            supplier="Digi-Key",
+            purchase_link="https://example.invalid/thing",
+            observed_at=timezone.now(),
+        )
+
+    def test_the_admin_inline_renders_a_new_tab_link(self):
+        self.client.force_login(
+            get_user_model().objects.create_superuser(
+                username="admin@andrew.cmu.edu", password="x"
+            )
+        )
+        response = self.client.get(
+            reverse("admin:inventory_part_change", args=[self.part.pk])
+        )
+        self.assertContains(response, 'target="_blank"')
+        self.assertContains(response, 'rel="noopener noreferrer"')
+
+    def test_the_public_page_does_too(self):
+        self.client.force_login(
+            get_user_model().objects.create_user(
+                username="staff@andrew.cmu.edu", password="x"
+            )
+        )
+        response = self.client.get(reverse("part_detail", args=[self.part.part_number]))
+        self.assertContains(response, 'target="_blank"')

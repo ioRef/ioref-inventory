@@ -79,7 +79,7 @@
                         <td class="num">{{ price.currency }} {{ price.price }}</td>
                         <td>
                             {% if price.purchase_link %}
-                                <a href="{{ price.purchase_link }}" rel="noopener">{{ price.supplier|default:"link" }}</a>
+                                <a href="{{ price.purchase_link }}" target="_blank" rel="noopener noreferrer">{{ price.supplier|default:"link" }}</a>
                             {% else %}{{ price.supplier|default:"—" }}{% endif %}
                         </td>
                     </tr>

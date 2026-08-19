@@ -1,11 +1,15 @@
+from urllib.parse import urlparse
+
 from django import forms
 from django.contrib import admin
 from django.db.models import Count, OuterRef, Subquery
+from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.http import urlencode
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.contrib.filters.admin import RangeDateFilter
+from unfold.decorators import action
 from unfold.widgets import UnfoldAdminTextInputWidget
 
 from .models import Group, Location, Part, PriceObservation, StockEvent, Tag
@@ -66,12 +70,29 @@ class StockEventInline(TabularInline):
 class PriceObservationInline(TabularInline):
     model = PriceObservation
     extra = 0
-    fields = ("price", "currency", "supplier", "purchase_link", "observed_at", "note")
+    fields = ("price", "currency", "supplier", "purchase", "observed_at", "note")
+    readonly_fields = ("purchase",)
     ordering = ("-observed_at",)
     can_delete = False
 
     def has_change_permission(self, request, obj=None):
         return False
+
+    @admin.display(description="Purchase link")
+    def purchase(self, obj):
+        """The supplier's page, opened in a new tab.
+
+        A readonly URLField renders as plain text, so this was previously an
+        un-clickable string. New tab because the link leaves for a supplier
+        site and whoever followed it is part-way through counting something.
+        """
+        if not obj.purchase_link:
+            return ""
+        return format_html(
+            '<a href="{}" target="_blank" rel="noopener noreferrer">{}</a>',
+            obj.purchase_link,
+            urlparse(obj.purchase_link).netloc or "link",
+        )
 
 
 class StatusInput(UnfoldAdminTextInputWidget):
@@ -110,21 +131,12 @@ class PartAdminForm(forms.ModelForm):
 class PartAdmin(ModelAdmin):
     form = PartAdminForm
 
-    def has_delete_permission(self, request, obj=None):
-        """A part is never deleted, by anyone.
+    # Rendered at the top of the change form. The inlines below are newest
+    # first and unbounded, so the "add another" link at the foot of a
+    # well-counted part is a long way down a page nobody wants to scroll
+    # while holding a barcode scanner.
+    actions_detail = ["record_count", "record_price"]
 
-        StockEvent and PriceObservation cascade from Part, so deleting one row
-        here silently takes every count and price ever recorded against it. The
-        append-only history exists precisely so that a correction never
-        destroys what it corrects, and a delete button undoes that in a click.
-
-        Retiring a part is a status change: TO_DISCONTINUE, then DISCONTINUED.
-        The bin keeps its label and the history stays answerable.
-
-        Returning False also withdraws the bulk "delete selected" action, which
-        is the more dangerous of the two.
-        """
-        return False
     list_display = (
         "part_number",
         "short_name",
@@ -147,6 +159,41 @@ class PartAdmin(ModelAdmin):
     autocomplete_fields = ("group", "tags")
     inlines = (StockEventInline, PriceObservationInline)
     list_select_related = ("location", "group")
+
+    @action(description="Record count", icon="add", url_path="record-count")
+    def record_count(self, request, object_id):
+        return self._add_for_part(StockEvent, object_id)
+
+    @action(description="Record price", icon="payments", url_path="record-price")
+    def record_price(self, request, object_id):
+        return self._add_for_part(PriceObservation, object_id)
+
+    def _add_for_part(self, model, object_id):
+        """Open the child's add form with the part already chosen.
+
+        Django's add view fills a field from a query parameter of the same
+        name, so this needs no custom form. `_part` carries the same value
+        back out again, which is what tells response_add where to return to.
+        """
+        meta = model._meta
+        url = reverse(f"admin:{meta.app_label}_{meta.model_name}_add")
+        return redirect(f"{url}?part={object_id}&_part={object_id}")
+
+    def has_delete_permission(self, request, obj=None):
+        """A part is never deleted, by anyone.
+
+        StockEvent and PriceObservation cascade from Part, so deleting one row
+        here silently takes every count and price ever recorded against it. The
+        append-only history exists precisely so that a correction never
+        destroys what it corrects, and a delete button undoes that in a click.
+
+        Retiring a part is a status change: TO_DISCONTINUE, then DISCONTINUED.
+        The bin keeps its label and the history stays answerable.
+
+        Returning False also withdraws the bulk "delete selected" action, which
+        is the more dangerous of the two.
+        """
+        return False
 
     def get_queryset(self, request):
         # Without these annotations the on_floor/in_backstock/stock_state columns
@@ -210,8 +257,24 @@ class LocationAdmin(PartCountColumn, ModelAdmin):
     search_fields = ("code", "name")
 
 
+class ReturnsToPart:
+    """Send the user back to the part they came from after adding a record.
+
+    The add form posts to its own URL, so the `_part` parameter that
+    PartAdmin._add_for_part put there survives the round trip. Without this a
+    count recorded from a part page lands on the stock event changelist, which
+    is not where anybody was looking.
+    """
+
+    def response_add(self, request, obj, post_url_continue=None):
+        part_id = request.GET.get("_part")
+        if part_id and "_addanother" not in request.POST:
+            return redirect(reverse("admin:inventory_part_change", args=[part_id]))
+        return super().response_add(request, obj, post_url_continue)
+
+
 @admin.register(StockEvent)
-class StockEventAdmin(ModelAdmin):
+class StockEventAdmin(ReturnsToPart, ModelAdmin):
     list_display = ("part", "kind", "quantity", "observed_at", "recorded_by")
     list_filter = ("kind", ("observed_at", RangeDateFilter))
     search_fields = ("part__part_number", "part__short_name")
@@ -220,7 +283,7 @@ class StockEventAdmin(ModelAdmin):
 
 
 @admin.register(PriceObservation)
-class PriceObservationAdmin(ModelAdmin):
+class PriceObservationAdmin(ReturnsToPart, ModelAdmin):
     list_display = ("part", "price", "currency", "supplier", "observed_at")
     list_filter = ("currency", "supplier")
     search_fields = ("part__part_number", "part__short_name", "supplier")
