@@ -357,6 +357,12 @@ match = ["hex"]
 [groups."Shaft couplers"]
 parts = ["1874", "1880", "1888", "1890", "1892"]
 
+# A shaft collar and a shaft hub both clamp something to a rotating shaft, and
+# are chosen together. The USB hub that shared their head noun is networking
+# kit and goes back to having no group.
+[groups."Shaft collars and hubs"]
+parts = ["1540", "1542", "1545", "1552", "1556", "1881", "6049"]
+
 [groups."Fittings"]
 parts = ["1486", "1490"]
 
