@@ -228,6 +228,9 @@ UNFOLD = {
             "950": "3 40 18",
         },
     },
+    # Replaces Django's app list on the index with the three exceptions worth
+    # acting on. See inventory/dashboard.py and templates/admin/index.html.
+    "DASHBOARD_CALLBACK": "inventory.dashboard.dashboard_callback",
     "SIDEBAR": {
         "show_search": True,
         "navigation": [

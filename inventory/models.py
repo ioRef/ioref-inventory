@@ -2,7 +2,8 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db import models
-from django.db.models import OuterRef, Subquery
+from django.db.models import F, OuterRef, Subquery, Value
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 
@@ -80,6 +81,53 @@ class Tag(models.Model):
         return self.name
 
 
+class PartQuerySet(models.QuerySet):
+    """Stock derived in SQL, for the callers that cannot use the properties.
+
+    `on_floor` and `total_on_hand` are Python, so a filter, a sort or a count
+    over them would load the table. These express the same definitions as
+    subqueries, and the admin, the API and the dashboard all need them.
+
+    The annotations cannot be named `on_floor`/`in_backstock`: those are
+    properties, and a read-only property is a data descriptor that setattr(),
+    which is how Django applies annotations, cannot write through.
+    """
+
+    def with_stock(self):
+        return self.annotate(
+            _ann_on_floor=_latest_quantity(StockEvent.Kind.INVENTORY),
+            _ann_in_backstock=_latest_quantity(StockEvent.Kind.BACKSTOCK),
+        )
+
+    def _with_total(self):
+        return self.exclude(
+            _ann_on_floor__isnull=True, _ann_in_backstock__isnull=True
+        ).annotate(
+            _ann_total=Coalesce(F("_ann_on_floor"), Value(0))
+            + Coalesce(F("_ann_in_backstock"), Value(0))
+        )
+
+    def uncounted(self):
+        """Neither kind has ever been counted, which is not the same as zero."""
+        return self.filter(_ann_on_floor__isnull=True, _ann_in_backstock__isnull=True)
+
+    def below_minimum(self):
+        return self._with_total().filter(
+            min_quantity__isnull=False, _ann_total__lt=F("min_quantity")
+        )
+
+    def out_of_stock(self):
+        return self._with_total().filter(_ann_total=0)
+
+
+def _latest_quantity(kind):
+    return Subquery(
+        StockEvent.objects.filter(part=OuterRef("pk"), kind=kind)
+        .order_by("-observed_at", "-id")
+        .values("quantity")[:1]
+    )
+
+
 class Part(models.Model):
     """A stocked item.
 
@@ -152,6 +200,8 @@ class Part(models.Model):
     # ---- Derived stock values -------------------------------------------
     # Never stored. The legacy schema kept current_* mirror columns alongside
     # the history blobs and updated both by hand, so they could and did drift.
+
+    objects = PartQuerySet.as_manager()
 
     def _latest_quantity(self, kind, annotation):
         """Prefer a queryset annotation, falling back to a per-instance query.

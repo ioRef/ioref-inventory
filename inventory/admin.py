@@ -2,7 +2,7 @@ from urllib.parse import urlparse
 
 from django import forms
 from django.contrib import admin
-from django.db.models import Count, OuterRef, Subquery
+from django.db.models import Count
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.html import format_html, format_html_join
@@ -13,14 +13,6 @@ from unfold.decorators import action
 from unfold.widgets import UnfoldAdminTextInputWidget
 
 from .models import Group, Location, Part, PriceObservation, StockEvent, Tag
-
-
-def _latest_quantity(kind):
-    return Subquery(
-        StockEvent.objects.filter(part=OuterRef("pk"), kind=kind)
-        .order_by("-observed_at", "-id")
-        .values("quantity")[:1]
-    )
 
 
 class PartCountColumn:
@@ -51,6 +43,36 @@ class PartCountColumn:
         url = reverse("admin:inventory_part_changelist")
         query = urlencode({self.parts_lookup: obj.pk})
         return format_html('<a href="{}?{}">{}</a>', url, query, count)
+
+
+class StockStateFilter(admin.SimpleListFilter):
+    """The three states the stock column marks, as a filter.
+
+    Defined against the `_ann_` annotations PartAdmin already adds rather than
+    the model properties, because a filter has to be SQL: `needs_restock` and
+    `total_on_hand` are Python and cannot reach the database.
+
+    The definitions match the column exactly, which matters because the
+    dashboard counts link here. Never counted means neither kind has an event,
+    not that the total is zero.
+    """
+
+    title = "stock state"
+    parameter_name = "stock"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("low", "Below minimum"),
+            ("zero", "Out of stock"),
+            ("uncounted", "Never counted"),
+        )
+
+    def queryset(self, request, queryset):
+        return {
+            "low": queryset.below_minimum,
+            "zero": queryset.out_of_stock,
+            "uncounted": queryset.uncounted,
+        }.get(self.value(), lambda: queryset)()
 
 
 class StockEventInline(TabularInline):
@@ -147,7 +169,7 @@ class PartAdmin(ModelAdmin):
         "in_backstock",
         "stock_state",
     )
-    list_filter = ("status", "group", "tags", "location")
+    list_filter = (StockStateFilter, "status", "group", "tags", "location")
     search_fields = (
         "part_number",
         "short_name",
@@ -196,17 +218,10 @@ class PartAdmin(ModelAdmin):
         return False
 
     def get_queryset(self, request):
-        # Without these annotations the on_floor/in_backstock/stock_state columns
-        # each hit the database per row, so a 100-row page costs ~200 extra
-        # queries. The properties read the annotations back when present.
-        return (
-            super()
-            .get_queryset(request)
-            .annotate(
-                _ann_on_floor=_latest_quantity(StockEvent.Kind.INVENTORY),
-                _ann_in_backstock=_latest_quantity(StockEvent.Kind.BACKSTOCK),
-            )
-        )
+        # Without these annotations the on_floor/in_backstock/stock_state
+        # columns each hit the database per row, so a 100-row page costs ~200
+        # extra queries. The properties read the annotations back when present.
+        return super().get_queryset(request).with_stock()
 
     @admin.display(description="Stock", ordering="_ann_on_floor")
     def stock_state(self, part):

@@ -626,3 +626,84 @@ class PurchaseLinkTests(TestCase):
         )
         response = self.client.get(reverse("part_detail", args=[self.part.part_number]))
         self.assertContains(response, 'target="_blank"')
+
+
+class DashboardTests(TestCase):
+    """The admin index answers questions instead of listing tables."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="admin@andrew.cmu.edu", password="x"
+        )
+        self.client.force_login(self.user)
+        now = timezone.now()
+
+        def part(number, minimum=None, floor=None, status=Part.Status.ACTIVE):
+            p = Part.objects.create(
+                part_number=number,
+                short_name=f"part {number}",
+                min_quantity=minimum,
+                status=status,
+            )
+            if floor is not None:
+                StockEvent.objects.create(
+                    part=p,
+                    kind=StockEvent.Kind.INVENTORY,
+                    quantity=floor,
+                    observed_at=now,
+                )
+            return p
+
+        self.low = part("0001", minimum=10, floor=2)
+        self.empty = part("0002", minimum=5, floor=0)
+        self.healthy = part("0003", minimum=1, floor=50)
+        self.never = part("0004")
+        # Below its minimum but on the way out, so not work anyone should do.
+        self.retired = part(
+            "0005", minimum=10, floor=0, status=Part.Status.DISCONTINUED
+        )
+
+    def cards(self):
+        response = self.client.get(reverse("admin:index"))
+        return {c["label"]: c for c in response.context["cards"]}
+
+    def test_counts_cover_active_parts_only(self):
+        cards = self.cards()
+        # 0001 and 0002 are low; 0005 is low but discontinued.
+        self.assertEqual(cards["Below minimum"]["value"], 2)
+        self.assertEqual(cards["Out of stock"]["value"], 1)
+
+    def test_never_counted_ignores_status(self):
+        """A part nobody has ever counted is worth seeing whatever its status."""
+        self.assertEqual(self.cards()["Never counted"]["value"], 1)
+
+    def test_each_card_links_to_a_list_that_actually_filters(self):
+        for label, expected in (
+            ("Below minimum", {self.low.pk, self.empty.pk}),
+            ("Out of stock", {self.empty.pk}),
+            ("Never counted", {self.never.pk}),
+        ):
+            with self.subTest(label=label):
+                response = self.client.get(self.cards()[label]["url"])
+                self.assertEqual(response.status_code, 200)
+                shown = {p.pk for p in response.context["cl"].result_list}
+                self.assertEqual(shown, expected)
+
+    def test_the_app_list_is_gone(self):
+        """It duplicated the sidebar and disagreed with it about the names."""
+        response = self.client.get(reverse("admin:index"))
+        self.assertNotContains(response, "Authentication and Authorization")
+
+    def test_recent_counts_skip_imported_history(self):
+        """Imported events carry no recorder and would fill the list."""
+        StockEvent.objects.create(
+            part=self.healthy,
+            kind=StockEvent.Kind.INVENTORY,
+            quantity=7,
+            observed_at=timezone.now(),
+            recorded_by=self.user,
+        )
+        response = self.client.get(reverse("admin:index"))
+        recent = list(response.context["recent_counts"])
+        self.assertEqual(len(recent), 1)
+        self.assertEqual(recent[0].recorded_by, self.user)

@@ -1,0 +1,68 @@
+{% extends 'admin/base.html' %}
+
+{% comment %}
+Replaces Unfold's index, which includes unfold/helpers/app_list_default.html:
+a table of every registered model grouped by app label. The sidebar already
+navigates, and it groups by task rather than by app, so the two disagreed about
+both the section names and the model names, and "Groups" appeared twice meaning
+two unrelated things.
+
+Kept deliberately small. This shadows an Unfold template, so every line here is
+a line that can drift on upgrade; the utility classes are ones Unfold's own
+templates use, so they are in its compiled CSS.
+{% endcomment %}
+
+{% load i18n %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+    {% include "unfold/helpers/site_branding.html" %}
+{% endblock %}
+
+{% block content %}
+    <div class="flex flex-col lg:flex-row lg:gap-8">
+        <div class="grow">
+            <div class="grid grid-cols-1 gap-6 mb-8 md:grid-cols-3">
+                {% for card in cards %}
+                    <a href="{{ card.url }}"
+                       class="bg-white block border border-base-200 p-6 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800">
+                        <p class="font-semibold text-2xl {% if card.value %}{% if card.tone == 'restock' %}text-red-600 dark:text-red-500{% else %}text-base-500 dark:text-base-400{% endif %}{% else %}text-base-900 dark:text-base-100{% endif %}">
+                            {{ card.value }}
+                        </p>
+                        <p class="font-semibold mt-1 text-base-900 dark:text-base-100">{{ card.label }}</p>
+                        <p class="mt-1 text-base-500 text-sm dark:text-base-400">{{ card.hint }}</p>
+                    </a>
+                {% endfor %}
+            </div>
+
+            {% if recent_counts %}
+                <div class="bg-base-50 mb-6 rounded-default p-3 dark:bg-base-800">
+                    <table class="border border-base-400/10 border-spacing-none border-separate rounded-default overflow-hidden shadow-xs w-full dark:border-base-800">
+                        <caption class="font-semibold mb-3 text-base-900 text-left dark:text-base-100">
+                            {% translate "Recent counts" %}
+                        </caption>
+
+                        {% for event in recent_counts %}
+                            <tr class="bg-white dark:bg-base-900">
+                                <th scope="row" class="font-normal p-3 text-left {% if not forloop.last %}border-b border-base-100 dark:border-base-800{% endif %}">
+                                    <a href="{% url 'admin:inventory_part_change' event.part_id %}">
+                                        {{ event.part.part_number }} {{ event.part.short_name }}
+                                    </a>
+                                </th>
+                                <td class="p-3 text-right {% if not forloop.last %}border-b border-base-100 dark:border-base-800{% endif %}">
+                                    {{ event.quantity }} {{ event.get_kind_display|lower }}
+                                </td>
+                                <td class="p-3 text-right text-base-500 dark:text-base-400 {% if not forloop.last %}border-b border-base-100 dark:border-base-800{% endif %}">
+                                    {{ event.recorded_by }}, {{ event.observed_at|date:"j M Y" }}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </table>
+                </div>
+            {% endif %}
+        </div>
+
+        {% include "unfold/helpers/history.html" %}
+    </div>
+{% endblock %}
