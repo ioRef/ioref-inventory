@@ -1,0 +1,105 @@
+name: deploy
+
+# Manual deploy to production, run on the self-hosted runner on ioref-web-01.
+#
+# Pulls an immutable sha-* image from GHCR, retags it locally as the tag the
+# Quadlet unit references, and restarts the unit. The mutable `production` tag
+# exists only on that host, so the registry stays a record of what was built.
+#
+# Deliberately does not check out the repository. The deploy needs an image
+# name and nothing else, and the runner reaches GitHub through a proxy with a
+# narrow allowlist, so every avoided request is one fewer thing to allow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit SHA to deploy. Defaults to the selected ref. Use this to roll back."
+        required: false
+        type: string
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/ioref/ioref-inventory
+  CONTAINER: ioref-inventory-production
+  UNIT: ioref-inventory-production.service
+  LOCAL_TAG: localhost/ioref-inventory:production
+  HTTP_PROXY: http://proxy.andrew.cmu.edu:3128
+  HTTPS_PROXY: http://proxy.andrew.cmu.edu:3128
+  NO_PROXY: .cmu.edu,.cmu.local,localhost,127.0.0.1
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Resolve the image to deploy
+        id: target
+        run: |
+          SHA="${{ inputs.sha || github.sha }}"
+          echo "ref=${IMAGE}:sha-${SHA}" >> "$GITHUB_OUTPUT"
+          echo "Deploying ${IMAGE}:sha-${SHA}"
+
+      - name: Record what is running now
+        id: current
+        run: |
+          # Captured before anything moves, so a failed deploy can put it back.
+          echo "digest=$(podman image inspect "$LOCAL_TAG" \
+            --format '{{.Digest}}' 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Pull
+        run: podman pull "${{ steps.target.outputs.ref }}"
+
+      - name: Retag and restart
+        run: |
+          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          podman tag "${{ steps.target.outputs.ref }}" "$LOCAL_TAG"
+          systemctl --user restart "$UNIT"
+
+      - name: Wait for health
+        id: health
+        run: |
+          # The image's own healthcheck, so this asks the container the same
+          # question podman does rather than inventing a second definition.
+          for attempt in $(seq 1 30); do
+            if podman healthcheck run "$CONTAINER" >/dev/null 2>&1; then
+              echo "Healthy after ${attempt} attempt(s)."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Never became healthy. Last 50 log lines:"
+          podman logs --tail 50 "$CONTAINER" || true
+          exit 1
+
+      - name: Roll back
+        if: failure() && steps.health.outcome == 'failure' && steps.current.outputs.digest != ''
+        run: |
+          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          echo "::warning::Restoring ${{ steps.current.outputs.digest }}"
+          podman tag "${{ steps.current.outputs.digest }}" "$LOCAL_TAG"
+          systemctl --user restart "$UNIT"
+
+      - name: Report
+        if: always()
+        run: |
+          {
+            echo "### ${{ job.status }}"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Image | \`${{ steps.target.outputs.ref }}\` |"
+            echo "| Previous | \`${{ steps.current.outputs.digest || 'none' }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

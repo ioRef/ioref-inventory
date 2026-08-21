@@ -42,7 +42,7 @@ VOLUME ["/app/data"]
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/').status==200 else 1)"
+    CMD python -c "import os,urllib.request,sys; p=os.environ.get('SCRIPT_NAME',''); sys.exit(0 if urllib.request.urlopen(f'http://127.0.0.1:8000{p}/api/v1/health/').status==200 else 1)"
 
 # Two workers: enough that a slow request does not block the next one, few
 # enough that SQLite's single-writer lock stays uncontended.
