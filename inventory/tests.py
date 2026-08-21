@@ -711,12 +711,18 @@ class DashboardTests(TestCase):
 
 
 class CategoryTests(TestCase):
-    """The macro taxonomy: set here, rendered by whoever shows the guides."""
+    """The macro taxonomy: set here, rendered by whoever shows the guides.
+
+    Named away from the five real categories the 0006 migration seeds
+    (input, output, power, connector, controller), so this stays a unit test
+    of the mechanism rather than a test that happens to pass only because the
+    migration ran first.
+    """
 
     def setUp(self):
-        self.power = Category.objects.create(name="Power", slug="power")
+        self.gadgets = Category.objects.create(name="Gadgets", slug="gadgets")
         self.resistors = Group.objects.create(
-            name="Resistors", slug="resistor", category=self.power
+            name="Resistors", slug="resistor", category=self.gadgets
         )
         self.fasteners = Group.objects.create(name="Fasteners", slug="fasteners")
         Part.objects.create(
@@ -736,25 +742,25 @@ class CategoryTests(TestCase):
     def test_groups_carry_their_category_slug(self):
         response = self.client.get("/api/v1/groups/")
         by_slug = {g["slug"]: g for g in response.data["results"]}
-        self.assertEqual(by_slug["resistor"]["category"], "power")
+        self.assertEqual(by_slug["resistor"]["category"], "gadgets")
         self.assertIsNone(by_slug["fasteners"]["category"])
 
     def test_groups_can_be_filtered_by_category(self):
-        response = self.client.get("/api/v1/groups/?category=power")
+        response = self.client.get("/api/v1/groups/?category=gadgets")
         self.assertEqual([g["slug"] for g in response.data["results"]], ["resistor"])
 
     def test_parts_can_be_filtered_by_category(self):
-        response = self.client.get("/api/v1/parts/?category=power")
+        response = self.client.get("/api/v1/parts/?category=gadgets")
         numbers = [p["part_number"] for p in response.data["results"]]
         self.assertEqual(numbers, ["0001"])
 
     def test_categories_are_listed(self):
         response = self.client.get("/api/v1/categories/")
-        self.assertEqual([c["slug"] for c in response.data["results"]], ["power"])
+        self.assertIn("gadgets", [c["slug"] for c in response.data["results"]])
 
     def test_deleting_a_category_leaves_the_group(self):
         """Retiring a heading must not take the parts filed under it."""
-        self.power.delete()
+        self.gadgets.delete()
         self.resistors.refresh_from_db()
         self.assertIsNone(self.resistors.category)
         self.assertEqual(self.resistors.parts.count(), 1)
