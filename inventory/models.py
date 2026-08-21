@@ -39,7 +39,7 @@ class Category(models.Model):
     taxonomy goes stale.
 
     Rows, not code, so a deployment with no guides site leaves the table empty
-    and every group keeps `category = None`. Carries no colour and no ordering:
+    and every group keeps `category = None`. Carries no color and no ordering:
     which categories to show and what they look like is ioref-web's decision,
     and duplicating it here would give two answers to one question.
     """
@@ -64,7 +64,7 @@ class Group(models.Model):
     would break both.
 
     The name stays at the fine level. `Potentiometers` and `Capacitors` would
-    mean something to any organisation; `Input` only means something to a
+    mean something to any organization; `Input` only means something to a
     course, so the macro level is a separate field rather than part of the name.
     """
 
@@ -160,7 +160,7 @@ class Part(models.Model):
 
     Deliberately excludes guide content. Write-ups, categories and images live
     in ioref-web and join to this table on `part_number`. Keeping them out is
-    what makes this app deployable by another organisation with its own parts
+    what makes this app deployable by another organization with its own parts
     and no interest in ours.
     """
 

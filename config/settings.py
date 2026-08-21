@@ -158,7 +158,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # ---------------------------------------------------------------------------
 # Admin theme
 #
-# IDeATe's house palette, which colour-codes parts by category: input green,
+# IDeATe's house palette, which color-codes parts by category: input green,
 # output cyan, controller purple, connector grey, power crimson. Kept whole so
 # badges can reuse the vocabulary staff already read on the guides site and in
 # the drawio shape library.
@@ -182,7 +182,7 @@ UNFOLD = {
         # reads as navy chrome. ioref.org's greys are pure neutral, so this
         # scale is built from the house values: off-white #fdfdfd,
         # grey1 #f2f2f2, grey2 #c4c4c4, connector #636466, grey3 #4f4f4f,
-        # off-black #1d1d1d. Equal R=G=B throughout, so no colour cast.
+        # off-black #1d1d1d. Equal R=G=B throughout, so no color cast.
         "base": {
             "50": "253 253 253",
             "100": "242 242 242",

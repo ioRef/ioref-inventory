@@ -5,7 +5,7 @@ Parts inventory: stock levels, locations, prices, suppliers, and their history.
 Deliberately knows nothing about guides, categories, maker cards, or images.
 Those live in **ioref-web**, a separate repository that joins to this one
 on `part_number` over the API below. That split is what lets this app be
-deployed by an organisation that has its own parts and no interest in ours.
+deployed by an organization that has its own parts and no interest in ours.
 
 ## Quick start
 
@@ -57,7 +57,7 @@ page with count history. It exists so the application is useful on its own: a
 deployment with no site in front of it still needs a way to look at its own stock.
 
 Deliberately unbranded. House styling belongs in whatever site sits in front;
-ioref-web renders the same data in IDeATe's colours.
+ioref-web renders the same data in IDeATe's colors.
 
 **Prices and suppliers are shown only to signed-in users.** Stock levels answer
 "do you have any, and where"; what it cost and who sold it is procurement's
@@ -94,7 +94,7 @@ reclassified.
 
 **Group holds only the fine level.** `Potentiometers`, `Capacitors`, `Diodes`.
 The macro level is `Category` on the group, optional and usually empty: most of
-the catalogue is stock rather than curriculum. What the categories look like,
+the catalog is stock rather than curriculum. What the categories look like,
 and which are shown, is the guides site's decision.
 
 **Group is singular, tags are plural.** A part is one kind of thing, which is
@@ -151,7 +151,7 @@ record who counted them.
 
 ## Admin theme
 
-`django-unfold`, themed with IDeATe's house palette, which colour-codes parts by
+`django-unfold`, themed with IDeATe's house palette, which color-codes parts by
 category:
 
 | input | output | controller | connector | power |
@@ -167,7 +167,7 @@ never-counted, plain number otherwise. Marking healthy rows too makes the list
 harder to scan and buries the ones needing work.
 
 The admin's own scales are `UNFOLD["COLORS"]`; a spin-out deployment replaces
-them to rebrand. Category colours belong to whatever renders the categories.
+them to rebrand. Category colors belong to whatever renders the categories.
 
 ## Tests
 

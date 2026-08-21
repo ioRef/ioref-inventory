@@ -217,7 +217,7 @@ class BulkLookupTests(TestCase):
 class PublicBrowseTests(TestCase):
     """Read-only HTML views at /.
 
-    The security-relevant behaviour is that anonymous visitors see stock but
+    The security-relevant behavior is that anonymous visitors see stock but
     not what it cost or who sold it.
     """
 
@@ -730,7 +730,7 @@ class CategoryTests(TestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
     def test_a_group_may_have_no_category(self):
-        """Most of the catalogue is not in the curriculum, and should not be."""
+        """Most of the catalog is not in the curriculum, and should not be."""
         self.assertIsNone(self.fasteners.category)
 
     def test_groups_carry_their_category_slug(self):

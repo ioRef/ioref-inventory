@@ -27,10 +27,8 @@ Stock and guide content are separate domains, and the split runs along that
 boundary:
 
 * **Guide content** belongs to **ioref-web**: write-ups, images, part sets, and
-  the macro taxonomy that files a group under input, output, power, connector
-  or controller. That taxonomy is a teaching decision, it is not derivable from
-  anything here, and it covers only the part of the catalog the course
-  explains. Inventory owes it stable group slugs and nothing else.
+  every presentation decision, including which categories to show and what
+  color they are.
 * **Stock** belongs here: counts, backstock, prices, suppliers, locations,
   minimum and maximum quantities.
 
@@ -109,9 +107,18 @@ survives it.
 fields, so a part can be reclassified without appearing to move and moved
 without appearing to be reclassified.
 
-Only the fine half is inventory's business. `Potentiometers`, `Capacitors` and
-`Diodes` would mean something to any organization; `Input` only means something
-to a course.
+`Potentiometers`, `Capacitors` and `Diodes` would mean something to any
+organization; `Input` only means something to a course, which is why the macro
+level is `Category` on the group rather than part of the group's name.
+
+**`Category` is here, its appearance is not.** Filing a group under Input or
+Power is a teaching decision, and the person making it is the person creating
+the group, so asking them to edit a second repository to record it is how a
+taxonomy goes stale. It is rows rather than code: a deployment with no guides
+site leaves the table empty and every group keeps `category = None`, which is
+also the right state for `Fasteners` here. Categories carry no color and no
+ordering, because which ones to display and how is ioref-web's call and two
+answers to that question is one too many.
 
 **The group vocabulary was derived once and is now edited by hand.** It came out
 of the migration by taking the head noun of each part's own name, then curating
