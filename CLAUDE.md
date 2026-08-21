@@ -79,21 +79,23 @@ the container is **created**, so `systemctl restart` on the unit applies an edit
 and `podman restart` does not: the latter reuses the existing container with the
 environment it was built with, which looks exactly like the edit not working.
 
-**Only `https://ioref.org/Shibboleth.sso/SAML2/POST` is registered with CMU.**
-The service provider derives its assertion consumer URL from the `Host` header,
-so a login attempted at `guides.ioref.org` or `inventory.ioref.org` is refused by
-the IdP with "Web Login Service - Unable to Respond" and nothing is logged
-locally. Serving this application anywhere but the apex needs a second registered
-endpoint, or a pinned `handlerURL` and a domain-scoped session cookie to borrow
-the existing one.
+**Five assertion consumer endpoints are registered with CMU: four on the apex
+and one on `inventory.ioref.org`.** The service provider derives its assertion
+consumer URL from the `Host` header, so a login completes only on a registered
+name. The deployment at `https://ioref.org/inventory` uses the apex endpoint and
+needs no change to `shibboleth2.xml`.
+
+`guides.ioref.org` is not registered. Logins there are refused by the IdP with
+"Web Login Service - Unable to Respond" and nothing is logged locally, which is
+why the vhost redirects that name to the apex rather than serving it. The
+inventory registration does not help it; a third endpoint would.
 
 **The Apache vhost is not in this repository.** It is deployment specific and
-lives on the host. `DEPLOYMENT.md` covers the container, the runner and the
-environment file but does not yet reach the web tier, so what the vhost has to
-guarantee is recorded here and under implementation constraints instead. That is
-a gap rather than a design: the vhost is the only thing standing between the
-header-trust backend and anyone who can reach it, and it is currently documented
-nowhere that survives the host.
+lives on the host, as `/etc/httpd/conf.d/02-ioref.org.conf`, where it serves the
+ioref-web at `/` and this application at `/inventory`. What it has to guarantee
+is recorded in the Apache section of `DEPLOYMENT.md`, because the vhost is the
+only thing standing between the header-trust backend and anyone who can reach
+it, and that is too important to exist only on one host.
 
 ## Design decisions
 
@@ -215,6 +217,9 @@ The `RequestHeader unset ... early` directives in the vhost are the first half,
 and `early` is not decoration: without it mod_headers runs at the fixup hook,
 *after* mod_shib has populated the headers from the SAML session, so the unset
 strips the authentic values and breaks login rather than blocking the forgery.
+The block must name every header the application reads, so adding a
+`REMOTE_USER_*_HEADER` setting without adding it there reopens the bypass. See
+the Apache section of `DEPLOYMENT.md`.
 
 **The API must remain outside Shibboleth.** ioref-web is a service and cannot
 complete a browser redirect to an identity provider. `/inventory/admin` uses
@@ -392,9 +397,13 @@ assist navigation but not data entry. Access control should be enforced in Djang
 with `@login_required` in addition to Apache, so it does not depend on deployment
 configuration.
 
-**A second assertion consumer endpoint.** Registering
-`https://inventory.ioref.org/Shibboleth.sso/SAML2/POST` with CMU would let this
-application move to its own hostname instead of a path on the shared one, and
-would fix logins on `guides.ioref.org`, which are broken today for the same
-reason. Lead time is with InCommon rather than with us.
+**Moving to `inventory.ioref.org`.**
+`https://inventory.ioref.org/Shibboleth.sso/SAML2/POST` is now registered, so
+this application can move to its own hostname instead of a path on the shared
+one whenever that is wanted. Doing so drops `SCRIPT_NAME`, `FORCE_SCRIPT_NAME`,
+the derived `STATIC_URL` prefix and the renamed cookies, and changes every
+published `/inventory/...` URL, so it is a planned migration rather than a
+configuration change. `DEPLOYMENT.md` covers what moves.
 
+That registration does **not** fix `guides.ioref.org`, which is still
+unregistered and still redirected to the apex.

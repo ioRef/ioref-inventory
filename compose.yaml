@@ -6,8 +6,8 @@ services:
       # Loopback only, deliberately. Under AUTH_MODE=shib the app trusts the
       # identity headers Apache sets, so anything that can reach this port
       # directly can authenticate as anyone by sending them. Apache proxies to
-      # 127.0.0.1:8000; nothing else needs to reach it. See
-      # deploy/apache/inventory.conf and accounts/backends.py.
+      # 127.0.0.1:8000; nothing else needs to reach it. See accounts/backends.py
+      # and the Apache section of DEPLOYMENT.md.
       - "127.0.0.1:${PORT:-8000}:8000"
     env_file:
       - "${ENV_FILE:-.env}"

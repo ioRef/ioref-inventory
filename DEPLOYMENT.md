@@ -79,6 +79,13 @@ Verify Podman:
 podman --version
 ```
 
+The web tier is assumed to exist already: `httpd`, `mod_ssl` and
+`shibboleth.x86_64`, with the service provider's keypair registered with CMU.
+Standing up a new service provider is a coordination with the identity
+provider rather than a package install, and its keypair must survive host
+rebuilds or the registered metadata goes stale and every login fails. Section 6
+covers the configuration that this application requires.
+
 ## 2. Create the deployment account
 
 Create a dedicated `deploy` account for the GitHub Actions runner and
@@ -335,7 +342,247 @@ container's `ioref` user because SQLite may create journal or WAL files beside
 Do not start the service yet. The local
 `localhost/ioref-inventory:production` image is created by the first deployment.
 
-## 6. Install the GitHub Actions runner
+## 6. Configure Apache and Shibboleth
+
+The container listens on `127.0.0.1:8000` and nothing outside the host can
+reach it. Apache terminates TLS, runs the Shibboleth service provider, and
+proxies to it.
+
+**This vhost is the only thing standing between `TrustedHeaderBackend` and
+anyone who can reach the host.** Under `AUTH_MODE=shib` the application trusts
+its identity headers without verification, so the web tier has two jobs of
+equal weight: pass the authentic identity through, and strip any the client
+sent for itself. It is recorded here because it lives on the host rather than
+in this repository, and it is too important to exist in only one place.
+
+### The files
+
+| File | Owner | Purpose |
+|---|---|---|
+| `/etc/httpd/conf.d/01-shib.conf` | shibboleth RPM | Loads `mod_shib`, exposes `/Shibboleth.sso` |
+| `/etc/httpd/conf.d/02-ioref.org.conf` | this host | The `ioref.org` vhost, serving both applications |
+
+Leave `01-shib.conf` as the package installed it; it is preserved across
+upgrades, and its `<Location /secure>` block is the stock example and unused.
+One setting in it governs the syntax below: `ShibCompatValidUser Off` means
+`Require valid-user` does **not** accept a Shibboleth session, because
+`mod_shib` leaves `r->user` unset and `mod_authz_user` then denies everyone.
+Session requirements are written `Require shib-session` instead.
+
+`02-ioref.org.conf` serves two applications from one vhost:
+
+```
+/            ioref-web on 127.0.0.1:8989
+/inventory   ioref-inventory on 127.0.0.1:8000
+```
+
+It is the shared host's file rather than this application's, but inventory is
+mounted inside it, so the two cannot be maintained apart.
+
+It is also the first file in `conf.d` to declare a `VirtualHost`, which makes
+its first `*:443` block Apache's default for any name matching no `ServerName`.
+That is deliberately a redirect to the canonical name, so `admin.ioref.org`,
+`ioref-web-01.andrew.cmu.edu` and `ioref.ideate.cmu.edu` land on `ioref.org`
+rather than reaching Django with a `Host` that `ALLOWED_HOSTS` rejects.
+
+### Registered assertion consumer endpoints
+
+CMU has registered five, four on the apex and one on the inventory hostname:
+
+| Index | Binding | Location |
+|---|---|---|
+| 1 | HTTP-POST | `https://ioref.org/Shibboleth.sso/SAML2/POST` |
+| 2 | HTTP-POST-SimpleSign | `https://ioref.org/Shibboleth.sso/SAML2/POST-SimpleSign` |
+| 3 | HTTP-Artifact | `https://ioref.org/Shibboleth.sso/SAML2/Artifact` |
+| 4 | PAOS | `https://ioref.org/Shibboleth.sso/SAML2/ECP` |
+| 5 | HTTP-POST | `https://inventory.ioref.org/Shibboleth.sso/SAML2/POST` |
+
+There is one service provider, entityID `https://ioref.org/shibboleth`, and its
+`handlerURL` is relative, so the assertion consumer URL is derived from the
+`Host` each request arrives on. A login therefore completes only on a hostname
+in that list. Index 1 is what the current deployment at
+`https://ioref.org/inventory` uses, and `shibboleth2.xml` needs no changes for
+it.
+
+`guides.ioref.org` is **not** registered. Logins there are refused by the IdP
+with "Web Login Service - Unable to Respond" and nothing is logged locally,
+which is why the vhost redirects that name to the apex rather than serving it.
+Index 5 covers `inventory.ioref.org` only.
+
+### Stripping client-supplied identity headers
+
+This block is the security control. Every header the application reads must
+appear in it.
+
+```apache
+RequestHeader unset Eppn early
+RequestHeader unset Mail early
+RequestHeader unset Displayname early
+RequestHeader unset Remote-User early
+RequestHeader unset Persistent-Id early
+RequestHeader unset Subject-Id early
+RequestHeader unset Pairwise-Id early
+```
+
+`accounts/backends.py` trusts these completely, so a client able to send
+`Eppn: someone-else@andrew.cmu.edu` authenticates as them. `Eppn` is the one
+that matters most: every account has one, and `TrustedHeaderBackend` resolves
+on it.
+
+Three permanent-identifier candidates are cleared because `shibboleth2.xml`
+sets `REMOTE_USER="eppn subject-id pairwise-id persistent-id"` and which one
+CMU releases is not yet established. Unsetting a header nothing reads costs
+nothing, and leaves nothing to remember later.
+
+`mod_shib` clears the headers it maps in `attribute-map.xml` on its own, so
+this is the second layer, and the only layer for any header an application
+reads that the SP does not map. Adding a `REMOTE_USER_*_HEADER` setting in
+`config/settings.py` without adding it here reopens the bypass.
+
+The directives are vhost-scoped on purpose: ioref-web shares this host and
+benefits from the same protection.
+
+**`early` is not optional.** Without it `mod_headers` processes these at the
+fixup hook, which runs *after* `mod_shib` has populated the headers from the
+SAML session. The unset would then strip the authentic values and break login
+rather than block the forgery. `early` moves them to `post_read_request`, ahead
+of `mod_shib`.
+
+The two failure modes are silent and opposite, so test both after any change
+here.
+
+### Access control
+
+```apache
+<Location /inventory>
+  AuthType shibboleth
+  ShibRequestSetting requireSession 0
+  ShibUseHeaders On
+  Require shibboleth
+</Location>
+
+<Location /inventory/admin>
+  AuthType shibboleth
+  ShibRequestSetting requireSession 1
+  ShibUseHeaders On
+  Require shib-session
+</Location>
+
+<Location /inventory/api>
+  AuthType None
+  Require all granted
+</Location>
+```
+
+A lazy session on `/inventory`: the public part pages are anonymous, but a
+signed-in visitor is recognised. `Require shibboleth` is the provider that
+permits anonymous access, where `shib-session` would demand one and lock the
+public views.
+
+`ShibUseHeaders` is scoped per location rather than vhost-wide. `mod_shib`
+exposes attributes as environment variables by default, which a
+reverse-proxied application cannot see; headers are what survive the hop to
+gunicorn. ioref-web has no use for them.
+
+`/inventory/admin` requires a live CMU session but not a particular person.
+Authentication is Apache's job and authorisation is Django's, through
+`is_staff`. `TrustedHeaderBackend` creates no accounts, so an eppn with no row
+resolves to nobody and is sent away as an anonymous visitor without anything
+being written. A name allowlist here as well would mean maintaining the roster
+in two places, and the copy nobody remembers is the one that locks someone out.
+
+`/inventory/api` stays outside Shibboleth because ioref-web is a service and
+cannot complete a browser redirect to an identity provider. DRF enforces bearer
+keys there instead.
+
+### Proxying, first match wins
+
+```apache
+ProxyPass        /Shibboleth.sso !
+
+ProxyPass        /inventory  http://127.0.0.1:8000/inventory
+ProxyPassReverse /inventory  http://127.0.0.1:8000/inventory
+
+ProxyPass        / http://127.0.0.1:8989/
+ProxyPassReverse / http://127.0.0.1:8989/
+```
+
+Order is load-bearing, and so are the details of the middle pair:
+
+* **The SP handler must never be proxied.** Forwarding it into an application
+  is why `/Shibboleth.sso/Session` returns 404 on `admin.ioref.org`.
+* **Do not use `RewriteRule [P]` in this vhost.** It ignores `ProxyPass`
+  exclusions, which defeats the line above.
+* **The prefix is preserved, not stripped.** The container runs gunicorn with
+  `SCRIPT_NAME=/inventory` and gunicorn strips it itself, rejecting any request
+  whose path does not start with it: `Request path '/' does not start with
+  SCRIPT_NAME '/inventory'`. Mapping `/inventory/` to `/` here, the usual
+  reverse-proxy reflex, produces exactly that and a 500 on every request.
+* **No trailing slashes on either side.** This form matches `/inventory` and
+  everything beneath it, so the bare path needs no redirect. With a trailing
+  slash `/inventory` would miss and fall through to ioref-web, which answers
+  404, and a `RedirectMatch` cannot rescue it because `mod_proxy` claims the
+  URL before `mod_alias` runs.
+* **ioref-web's `ProxyPass /` must stay last.**
+
+TLS uses `/etc/pki/tls/certs/localhost.crt` with `server-chain.crt`. That is
+one InCommon SAN certificate covering `ioref.org`, `guides`, `inventory`,
+`admin`, `ioref-web-01.andrew.cmu.edu` and `ioref.ideate.cmu.edu`, expiring
+**2026-12-09** and renewed through InCommon rather than certbot. The
+`/etc/letsencrypt` path on this host belongs to `04-admin.ioref.org.conf` and
+is not what this vhost uses.
+
+`X-Forwarded-Proto` must be set to `https`. Both applications sit behind TLS
+terminated here, and ioref-inventory sets `SECURE_PROXY=True`, so without it
+Django treats every request as insecure and CSRF origin checks fail.
+
+### Verifying
+
+```bash
+apachectl configtest
+systemctl reload httpd
+```
+
+A forged header must not authenticate:
+
+```bash
+curl -sS -H 'Eppn: nobody@andrew.cmu.edu' https://ioref.org/inventory/ \
+  | grep -ci 'sign out'      # expect 0
+```
+
+A real login must still work: sign in through a browser and confirm
+`https://ioref.org/inventory/admin/` is reachable. If the forgery test passes
+but real logins break, `early` is missing or misplaced.
+
+The same request against gunicorn directly, from the host, **does**
+authenticate:
+
+```bash
+curl -sS -H 'Eppn: you@andrew.cmu.edu' http://127.0.0.1:8000/inventory/
+```
+
+That is expected. It is why `PublishPort` binds to `127.0.0.1` and why nothing
+else may be allowed to reach port 8000. The header scrubbing and the loopback
+binding are two halves of one control, and neither is sufficient alone.
+
+### Moving to `inventory.ioref.org`
+
+Index 5 makes this possible but does not require it. On a host or vhost of its
+own the mount point disappears: drop `SCRIPT_NAME`, proxy `/` to the app, and
+move the three `<Location>` blocks up to `/`, `/admin` and `/api`. Everything
+else carries over unchanged, including the reason for `early`.
+
+It also means dropping `FORCE_SCRIPT_NAME` and the derived `STATIC_URL` prefix,
+and revisiting the renamed session and CSRF cookies, which exist only to avoid
+colliding with ioref-web on a shared hostname. `ALLOWED_HOSTS` and
+`CSRF_TRUSTED_ORIGINS` change with it.
+
+Treat it as a planned migration with a rollback rather than a configuration
+tweak, since every published `/inventory/...` URL changes.
+
+---
+
+## 7. Install the GitHub Actions runner
 
 Register the runner directly to **ioRef/ioref-inventory**.
 
@@ -405,7 +652,7 @@ For example, the generated command will have this general form:
 
 Use the registration token generated by GitHub.
 
-## 7. Configure the runner to use `proxy.andrew.cmu.edu:3128`
+## 8. Configure the runner to use `proxy.andrew.cmu.edu:3128`
 
 Before installing or starting the runner service, create:
 
@@ -430,7 +677,7 @@ chown deploy:deploy /opt/github-actions-runner/.env
 chmod 0644 /opt/github-actions-runner/.env
 ```
 
-## 8. Install the runner as a system service
+## 9. Install the runner as a system service
 
 From `/opt/github-actions-runner`, after the runner has been registered:
 
@@ -449,7 +696,7 @@ The runner connects outbound to GitHub through
 `proxy.andrew.cmu.edu:3128`. GitHub does not need inbound access to the server
 or access to the VPN.
 
-## 9. Verify GitHub connectivity
+## 10. Verify GitHub connectivity
 
 GitHub's runner configuration script supports a connectivity check. If the
 runner cannot connect, use the `--check` command shown in GitHub's runner
@@ -691,20 +938,20 @@ Treat changes to deployment workflows as production access.
 
 # References
 
-- GitHub: Adding self-hosted runners  
+- GitHub: Adding self-hosted runners
   https://docs.github.com/actions/hosting-your-own-runners/adding-self-hosted-runners
 
-- GitHub: Configuring a self-hosted runner as a service  
+- GitHub: Configuring a self-hosted runner as a service
   https://docs.github.com/actions/hosting-your-own-runners/managing-self-hosted-runners/configuring-the-self-hosted-runner-application-as-a-service
 
-- GitHub: Using a proxy server with a self-hosted runner  
+- GitHub: Using a proxy server with a self-hosted runner
   https://docs.github.com/actions/how-tos/manage-runners/use-proxy-servers
 
-- GitHub: Self-hosted runner reference  
+- GitHub: Self-hosted runner reference
   https://docs.github.com/en/actions/reference/runners/self-hosted-runners
 
-- GitHub: Deployment environments  
+- GitHub: Deployment environments
   https://docs.github.com/actions/deployment/targeting-different-environments/using-environments-for-deployment
 
-- Podman: Quadlet/systemd units  
+- Podman: Quadlet/systemd units
   https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html
