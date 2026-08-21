@@ -6,9 +6,11 @@ name: deploy
 # Quadlet unit references, and restarts the unit. The mutable `production` tag
 # exists only on that host, so the registry stays a record of what was built.
 #
-# Deliberately does not check out the repository. The deploy needs an image
-# name and nothing else, and the runner reaches GitHub through a proxy with a
-# narrow allowlist, so every avoided request is one fewer thing to allow.
+# Deliberately does not check out the repository, and does not log in to
+# GHCR. The deploy needs an image name and nothing else: the package is
+# public, so `podman pull` needs no credential, and the runner reaches GitHub
+# through a proxy with a narrow allowlist, so every avoided request is one
+# fewer thing to get allowed there.
 
 on:
   workflow_dispatch:
@@ -37,7 +39,6 @@ jobs:
     environment: production
     permissions:
       contents: read
-      packages: read
 
     steps:
       - name: Resolve the image to deploy
@@ -53,11 +54,6 @@ jobs:
           # Captured before anything moves, so a failed deploy can put it back.
           echo "digest=$(podman image inspect "$LOCAL_TAG" \
             --format '{{.Digest}}' 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
-
-      - name: Log in to GHCR
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" \
-            | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Pull
         run: podman pull "${{ steps.target.outputs.ref }}"
