@@ -1,7 +1,7 @@
 /* Public browsing views.
  *
  * Intentionally plain. This application ships to other organisations, so it
- * carries no house styling -- ioref-web renders the same data in IDeATe's
+ * carries no house styling. ioref-web renders the same data in IDeATe's
  * colours. Neutral greys and a system font stack look deliberate anywhere.
  *
  * Type is sized for reading at a bench, matching the decision made for the
@@ -104,7 +104,7 @@ tbody tr:hover { background: var(--hover); }
 .num { text-align: right; }
 
 /* Only exceptions are marked. Most rows are fine, and badging every one buries
- * the handful that need attention -- same rule as the admin's stock column. */
+ * the handful that need attention, the same rule as the admin's stock column. */
 .low {
   background: var(--low-wash);
   border-radius: 0.25rem;

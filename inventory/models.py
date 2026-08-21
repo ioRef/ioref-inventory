@@ -10,13 +10,12 @@ from django.utils import timezone
 class Location(models.Model):
     """A physical place a part lives.
 
-    First-class rather than a string column so empty bins are real rows. The
-    legacy CSV carried hundreds of "Empty" placeholder rows that upload.py
-    dropped for having no part number, losing the fact that the bin exists.
+    First-class rather than a string column, so a shelf does not stop existing
+    when the last part leaves it.
 
-    Legacy mixed two naming schemes in one column -- grid coordinates like
-    "B1-R1-C1" and free names like "soldering bench" -- so `code` is canonical
-    and `name` is the human label when there is one.
+    Two naming schemes are in use: grid coordinates like "B1-R1-C1" and free
+    names like "soldering bench". `code` is canonical, `name` is the human
+    label where there is one.
     """
 
     code = models.CharField(max_length=64, unique=True)
@@ -34,18 +33,15 @@ class Location(models.Model):
 class Group(models.Model):
     """What kind of part this is: Potentiometers, Capacitors, Diodes.
 
-    Flat and singular. A part is one kind of thing, so this is a plain foreign
-    key rather than tags -- it has to give an unambiguous answer to "show me
-    every capacitor below minimum", and to "which component page covers this
-    part". Two type-ish tags would make both questions ambiguous.
+    Flat and singular. A part is one kind of thing, so this is a foreign key
+    rather than tags, which is what makes "every capacitor below minimum" and
+    "which component page covers this part" unambiguous. Two type-ish tags
+    would break both.
 
-    Deliberately excludes the macro level. data.csv encodes locations like
-    "Input: Potentiometers", but that top level is a physical-computing teaching
-    taxonomy, not stock-keeping: its largest value, "Electrical Components", is
-    not one of ioref-web's five categories at all, and ioref-web's "Power" has
-    no parts under it. Which macro category a group belongs to is the frontdoor's
-    call; only the fine level is inventory's business, and it is the level that
-    would mean something to any other organisation.
+    Deliberately excludes the macro level. "Input" and "Output" are a
+    physical-computing teaching taxonomy rather than stock-keeping, and belong
+    to ioref-web. Only the fine level is inventory's business, and it is the
+    level that would mean something to any other organisation.
     """
 
     name = models.CharField(max_length=100, unique=True)
@@ -63,12 +59,11 @@ class Tag(models.Model):
     """A cross-cutting fact about a part that is not its type.
 
     Types are singular and exclusive; attributes are not. Part 0386 is a soft
-    linear potentiometer -- its group is Potentiometers, but the legacy data
-    filed it under "Touch" because that is how it is used. Both are true, and
-    only one of them is what the part *is*.
+    linear potentiometer whose group is Potentiometers and whose tag is "touch",
+    because touch is what it is for. Both are true and only one is what the
+    part *is*.
 
-    Also the home for states and uses that were smuggled into `location` in the
-    legacy data: "lending", "Tool Box", "consumable".
+    Also the home for states and uses such as "lending" and "tool box".
     """
 
     name = models.CharField(max_length=100, unique=True)
@@ -131,11 +126,10 @@ def _latest_quantity(kind):
 class Part(models.Model):
     """A stocked item.
 
-    Deliberately excludes guide/documentation content. The legacy `parts`
-    collection fused stock-keeping with maker-card write-ups (7 docs_* fields,
-    categories, images); those live in ioref-web and join to this table on
-    `part_number`. Keeping them out is what makes this app deployable by another
-    org that has its own parts and no interest in ours.
+    Deliberately excludes guide content. Write-ups, categories and images live
+    in ioref-web and join to this table on `part_number`. Keeping them out is
+    what makes this app deployable by another organisation with its own parts
+    and no interest in ours.
     """
 
     class Status(models.TextChoices):
@@ -153,8 +147,8 @@ class Part(models.Model):
 
     # Not `choices=Status.choices`: staff need to record statuses the four
     # canonical values don't cover ("on backorder", "awaiting quote"). The
-    # admin still offers the canonical values as suggestions -- see
-    # PartAdminForm's status widget -- but does not require picking one.
+    # admin still offers the canonical values as suggestions (see
+    # PartAdminForm's status widget) but does not require picking one.
     status = models.CharField(max_length=100, default=Status.ACTIVE, db_index=True)
     unit = models.CharField(max_length=32, default="each")
     group = models.ForeignKey(
@@ -198,8 +192,8 @@ class Part(models.Model):
         return f"{self.part_number} {self.short_name}"
 
     # ---- Derived stock values -------------------------------------------
-    # Never stored. The legacy schema kept current_* mirror columns alongside
-    # the history blobs and updated both by hand, so they could and did drift.
+    # Never stored. A stored total is a second copy of what the events already
+    # say, and the two drift.
 
     objects = PartQuerySet.as_manager()
 
@@ -209,7 +203,7 @@ class Part(models.Model):
         List endpoints annotate these so the whole page costs a constant number
         of queries. The annotations cannot be named `on_floor`/`in_backstock`
         directly: those are properties, and a read-only property is a data
-        descriptor that setattr() -- which is how Django applies annotations --
+        descriptor that setattr(), which is how Django applies annotations,
         cannot write through.
         """
         if annotation in self.__dict__:
@@ -229,9 +223,9 @@ class Part(models.Model):
 
     @property
     def total_on_hand(self):
-        """Floor + backstock, matching the legacy total_on_hand column.
+        """Floor + backstock.
 
-        None only when neither has ever been counted; a kind that was never
+        None only when neither has ever been counted. A kind that was never
         counted contributes 0 rather than voiding the total.
         """
         floor, back = self.on_floor, self.in_backstock
@@ -241,7 +235,7 @@ class Part(models.Model):
 
     @property
     def stock_ratio(self):
-        """total_on_hand / min_quantity, the legacy "%_on_hand" column."""
+        """How much is on hand as a fraction of the minimum."""
         total = self.total_on_hand
         if total is None or not self.min_quantity:
             return None
@@ -282,12 +276,7 @@ class StockEventQuerySet(models.QuerySet):
 class StockEvent(models.Model):
     """An append-only observation of how many of a part were counted.
 
-    Replaces the legacy `inventory_history` / `backstock_history` JSON blobs.
-    Those were read-modify-written wholesale on every update (racy: two staff
-    counting at once silently lost one count) and unqueryable without pulling
-    every part into memory and sorting keys.
-
-    Rows are never updated or deleted -- a miscount is corrected by recording a
+    Rows are never updated or deleted. A miscount is corrected by recording a
     new observation, so the audit trail stays intact.
     """
 
@@ -327,17 +316,14 @@ class StockEvent(models.Model):
 class PriceObservation(models.Model):
     """An append-only record of what a part cost, from whom, and where to rebuy.
 
-    Replaces the legacy price_history / supplier_history / purchase_link_history
-    blobs. Those were three parallel dicts keyed by timestamp, which meant a
-    price could not be reliably tied to the supplier it came from -- the keys
-    only lined up when all three happened to be edited in the same request.
-    Here they are one row, so the association is structural.
+    Price, supplier and link are one row, so a price is always attributable to
+    whoever sold it at that price.
     """
 
     part = models.ForeignKey(
         Part, on_delete=models.CASCADE, related_name="price_observations"
     )
-    # 4dp: legacy carried unit prices like $2.282 from bulk-pack division.
+    # 4dp, because dividing a bulk pack price gives unit prices like $2.282.
     price = models.DecimalField(max_digits=12, decimal_places=4)
     currency = models.CharField(max_length=3, default="USD")
     supplier = models.CharField(max_length=200, blank=True)

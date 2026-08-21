@@ -1,11 +1,10 @@
-"""Load a small slice of real IDeATe data for development.
+"""Load a small slice of real data for development.
 
-Rows and their counting history are taken from the legacy data.csv so the admin
-shows realistic shapes -- including the awkward ones: a part below its minimum,
-a part never counted, a discontinued part at zero, and empty bins.
+Real rows and real counting history, so the admin shows realistic shapes,
+including the awkward ones: a part below its minimum, a part never counted, a
+discontinued part at zero, and empty bins.
 
-Development only. Production data arrived by migration and is now edited
-through the admin.
+Development only. Production is edited through the admin.
 """
 
 import datetime
@@ -30,8 +29,8 @@ LOCATIONS = [
     ("Connector: Wire to Wire", ""),
     ("Connector: Misc.", ""),
     ("discontinued", "Discontinued stock"),
-    # Empty bins are real rows. The legacy CSV carried these as "Empty"
-    # placeholder lines that upload.py dropped for having no part number.
+    # Empty bins are real rows: a shelf does not stop existing when the last
+    # part leaves it.
     ("B9-R1-C1", ""),
     ("B9-R2-C7", ""),
     ("B9-R2-C8", ""),
@@ -45,7 +44,7 @@ LOCATIONS = [
 ]
 
 # part_num, name, description, location, min, max, unit, status,
-#   [(count, when)], [(count, when)] -- `when` is either an int meaning "this
+#   [(count, when)], [(count, when)]. `when` is either an int meaning "this
 #   many days ago" for the hand-written rows below, or an ISO date string where
 #   the real observation date is known from the CSV,
 #   (price, supplier, link) or None
@@ -147,7 +146,7 @@ PARTS = [
         ("0.08", "AliExpress", ""),
     ),
     (
-        # Discontinued and at zero -- a real state the UI has to render sanely.
+        # Discontinued and at zero, a real state the UI has to render sanely.
         "0028",
         "rigid base for Arduino Uno",
         "rigid mounting base, for Arduino Uno footprint",
@@ -200,9 +199,8 @@ PARTS = [
         [],
         None,
     ),
-    # Siblings of 0054. In data.csv all 33 ceramic capacitors repeat the same
-    # explanation; in ioref-web they share one component page, so these exist to
-    # exercise that grouping.
+    # Siblings of 0054. All 33 ceramic capacitors share one component page in
+    # ioref-web, so these exist to exercise that grouping.
     (
         "0056",
         "22pF ceramic capacitor",
@@ -245,7 +243,7 @@ PARTS = [
 ]
 
 # Potentiometers, with their real counting history parsed out of the CSV's
-# inventory1..N / back_stock1..N columns -- part 0390 alone carries 17 counts
+# inventory1..N / back_stock1..N columns. Part 0390 alone carries 17 counts
 # back to 2017. Dates here are the real observation dates, not offsets.
 POTENTIOMETERS = [
     (
@@ -1014,9 +1012,9 @@ POTENTIOMETERS = [
 PARTS = PARTS + POTENTIOMETERS
 
 
-# The legacy fine level is not quite a clean vocabulary. Singular and plural
-# spellings coexist, and a few values describe how a part is used rather than
-# what it is -- those become tags instead.
+# The source vocabulary is not clean. Singular and plural spellings coexist,
+# and a few values describe how a part is used rather than what it is; those
+# become tags instead.
 GROUP_ALIASES = {
     "potentiometer": "Potentiometers",
     "potentiometers": "Potentiometers",
@@ -1030,14 +1028,11 @@ USE_AS_TAG = {"touch": "touch", "lending": "lending"}
 
 
 def _classify(location_name):
-    """Split a legacy location string into (group, tag names).
+    """Split a location string into (group, tag names).
 
-    464 of 1,467 rows carry a location shaped "Input: Potentiometers" -- a
-    classification smuggled into the place field because the schema had nowhere
-    else to put it. Only the fine half is inventory's business: the macro half
-    ("Input", "Electrical Components") is a teaching taxonomy that ioref-web
-    owns, and the two do not even agree -- "Electrical Components" is not one of
-    the frontdoor's categories, and its "Power" has no parts here at all.
+    Some carry a classification as well as a place, shaped "Input:
+    Potentiometers". Only the fine half is inventory's business; the macro half
+    is a teaching taxonomy that ioref-web owns.
 
     Returns (None, []) for locations that really are just places.
     """
@@ -1050,7 +1045,7 @@ def _classify(location_name):
 
     key = fine.lower()
     if key in USE_AS_TAG:
-        # e.g. "Input: Touch" -- a soft potentiometer is still a potentiometer.
+        # e.g. "Input: Touch"; a soft potentiometer is still a potentiometer.
         return None, [USE_AS_TAG[key]]
 
     name = GROUP_ALIASES.get(key, fine)
@@ -1072,7 +1067,7 @@ def _observed(now, when):
 
 
 class Command(BaseCommand):
-    help = "Load a small slice of real legacy data for development."
+    help = "Load a small slice of real data for development."
 
     def add_arguments(self, parser):
         parser.add_argument(

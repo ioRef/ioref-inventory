@@ -30,7 +30,7 @@ class PartViewSet(viewsets.ModelViewSet):
     """Parts, addressed by part_number rather than surrogate id.
 
     part_number is the key ioref-web already holds on its PartPage, so
-    exposing it as the URL segment means the frontdoor never has to keep a
+    exposing it as the URL segment means ioref-web never has to keep a
     mapping table of our primary keys.
     """
 
@@ -74,7 +74,7 @@ class PartViewSet(viewsets.ModelViewSet):
 
         if (numbers := params.get("part_number__in")) is not None:
             # Bulk lookup for consumers that group several stocked parts under
-            # one heading -- ioref-web's component pages do, and the
+            # one heading. ioref-web's component pages do, and the
             # ceramic capacitors run to 33 part numbers. Without this the page
             # would issue one request per part.
             wanted = [n.strip() for n in numbers.split(",") if n.strip()]
@@ -139,7 +139,7 @@ class GroupViewSet(viewsets.ReadOnlyModelViewSet):
     lookup_field = "slug"
 
     def get_queryset(self):
-        # part_count saves the frontdoor a request per group when it is deciding
+        # part_count saves ioref-web a request per group when it is deciding
         # which groups are worth a component page.
         return Group.objects.annotate(part_count=Count("parts"))
 

@@ -15,7 +15,7 @@ class TrustedHeaderBackend(BaseBackend):
 
     SECURITY: this backend trusts its input completely. It is only safe when the
     proxy in front of the app unconditionally *overwrites* these headers on every
-    request -- including requests where the client supplied them. If the app is
+    request, including requests where the client supplied them. If the app is
     reachable other than through that proxy, anyone can authenticate as anyone by
     setting a header. See accounts/middleware.py, and the deployment section of
     CLAUDE.md for what the proxy in front of this has to guarantee.
@@ -58,7 +58,7 @@ class TrustedHeaderBackend(BaseBackend):
     def _resolve(self, username, subject_id):
         """Find the existing account, preferring the permanent identifier.
 
-        eppn can change -- a name change, or reassignment after someone leaves.
+        eppn can change: a name change, or reassignment after someone leaves.
         Where the IdP releases a permanent subject id, that is the identity and
         the eppn is just a label that follows it. Matching on eppn alone would
         eventually hand a returning stranger someone else's account history.

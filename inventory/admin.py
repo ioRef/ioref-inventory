@@ -120,8 +120,8 @@ class PriceObservationInline(TabularInline):
 class StatusInput(UnfoldAdminTextInputWidget):
     """Free text, with the canonical values offered as suggestions.
 
-    Part.status has no `choices=` -- staff need to record statuses the four
-    canonical values don't cover -- so this renders a plain text input backed
+    Part.status has no `choices=`, because staff need to record statuses the
+    four canonical values don't cover, so this renders a plain text input backed
     by a <datalist> instead of a <select>, letting a click-through pick still
     reach the common values without constraining what can be typed.
     """
@@ -227,8 +227,8 @@ class PartAdmin(ModelAdmin):
     def stock_state(self, part):
         """Total on hand, flagged only when it needs attention.
 
-        A healthy row is just a number. Marking every row -- including the
-        ~90% that are fine -- makes the list harder to scan, not easier, and
+        A healthy row is just a number. Marking every row, including the ~90%
+        that are fine, makes the list harder to scan rather than easier, and
         buries the handful that actually need restocking.
         """
         total = part.total_on_hand

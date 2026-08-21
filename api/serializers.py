@@ -66,8 +66,8 @@ class PriceObservationSerializer(serializers.ModelSerializer):
 class PartSerializer(serializers.ModelSerializer):
     """The read shape ioref-web consumes.
 
-    Stock figures are flattened onto the part because the frontdoor's job is to
-    answer "can I get one of these right now" -- it should not have to fetch and
+    Stock figures are flattened onto the part because ioref-web's job is to
+    answer "can I get one of these right now". It should not have to fetch and
     reduce an event list to render a card.
     """
 

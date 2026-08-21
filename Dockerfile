@@ -32,7 +32,7 @@ RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev
 RUN SECRET_KEY=build-only python manage.py collectstatic --noinput
 
 # Non-root, and owner of the data directory so SQLite can write its WAL
-# sidecar files -- SQLite needs write access to the directory, not just the db.
+# sidecar files. SQLite needs write access to the directory, not just the db.
 RUN useradd --system --create-home --uid 1001 ioref \
     && mkdir -p /app/data \
     && chown -R ioref:ioref /app/data

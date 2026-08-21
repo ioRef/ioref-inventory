@@ -9,7 +9,7 @@ from .models import ApiKey, User
 
 # Django registers Group itself at import time, so it arrives with the stock
 # admin's styling. Swapping the base class in is the only way to bring it under
-# the theme -- otherwise it looks like a different product.
+# the theme. Otherwise it looks like a different product.
 admin.site.unregister(Group)
 
 

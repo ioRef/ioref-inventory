@@ -3,7 +3,7 @@
 
 # data/ holds the live SQLite database. Copying it in would ship whatever was
 # on the build machine and then have it shadowed by the volume mount at
-# runtime -- wrong either way, and it puts real stock data in a registry.
+# runtime. Wrong either way, and it puts real stock data in a registry.
 data/
 
 # Built on the host, for the host. The image runs its own `uv sync`.

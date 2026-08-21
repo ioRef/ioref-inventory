@@ -14,7 +14,7 @@ dependencies = [
 
 [tool.ruff.lint]
 # Explicit rather than left to ruff's defaults. Those have broadened over
-# time -- 0.16 enables RUF, DTZ, B and more out of the box -- so relying on
+# time (0.16 enables RUF, DTZ, B and more out of the box), so relying on
 # them means a version bump can fail the build with no code change behind it.
 # E501 is left out on purpose: ruff format owns line length.
 select = ["E4", "E7", "E9", "F", "I"]

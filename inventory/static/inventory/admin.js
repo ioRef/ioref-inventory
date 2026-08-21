@@ -1,6 +1,6 @@
 // Make changelist rows clickable.
 //
-// The link is still a real <a> in the first cell -- this only widens its hit
+// The link is still a real <a> in the first cell; this only widens its hit
 // area to the whole row. Keyboard users tab to the link exactly as before, and
 // screen readers see unchanged markup, which is why the row is not given a
 // role="link" or a tabindex of its own.

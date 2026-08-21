@@ -9,8 +9,8 @@ from django.utils import timezone
 class User(AbstractUser):
     """Custom user, defined at project start because it cannot be added later.
 
-    `username` holds the eduPersonPrincipalName -- `user@andrew.cmu.edu` at CMU
-    -- rather than a bare Andrew ID. eppn is unique across the federation where
+    `username` holds the eduPersonPrincipalName, `user@andrew.cmu.edu` at CMU,
+    rather than a bare Andrew ID. eppn is unique across the federation where
     a bare username is unique only within one institution, and it maps directly
     onto Entra's UPN when that migration happens. Django's default username
     validator already permits `@`, so this needs no field override.
@@ -62,15 +62,13 @@ class ApiKeyQuerySet(models.QuerySet):
 class ApiKey(models.Model):
     """A shared secret identifying a calling service, not a person.
 
-    ioref-web holds one of these with READ scope. Keys are stored hashed,
-    because the system this replaced kept a live access token as a literal in
-    its source, committed to git, which made a repo leak a data-store
-    compromise. Here a database leak yields only hashes, and the plaintext
-    exists once, at creation time.
+    ioref-web holds one of these with READ scope. Keys are stored hashed, so a
+    database leak yields hashes rather than working credentials. The plaintext
+    exists once, at creation time, and is never recoverable.
 
     SHA-256 rather than a password hasher is deliberate. These are 32 bytes of
     CSPRNG output, so there is no dictionary to attack and no need to make
-    verification slow -- and verification happens on every API request.
+    verification slow, and verification happens on every API request.
     """
 
     class Scope(models.TextChoices):

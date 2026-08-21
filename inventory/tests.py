@@ -19,7 +19,7 @@ from inventory.models import (
 
 
 class StockDerivationTests(TestCase):
-    """The derived values that replace the legacy current_* mirror columns."""
+    """Stock derived from events rather than stored."""
 
     def setUp(self):
         self.bench = Location.objects.create(code="soldering bench")
@@ -40,8 +40,8 @@ class StockDerivationTests(TestCase):
         )
 
     def test_uncounted_part_reports_none_not_zero(self):
-        # Legacy used -1 as a sentinel for "never counted", which then flowed
-        # into arithmetic. Absence must stay distinguishable from a real zero.
+        # Never counted is not zero. Absence has to stay distinguishable from
+        # a real zero, or restocking decisions are made on invented numbers.
         self.assertIsNone(self.part.on_floor)
         self.assertIsNone(self.part.total_on_hand)
         self.assertFalse(self.part.needs_restock)
@@ -51,8 +51,8 @@ class StockDerivationTests(TestCase):
         self._count(StockEvent.Kind.INVENTORY, 99, days_ago=30)  # backdated
         self.assertEqual(self.part.on_floor, 5)
 
-    def test_total_matches_legacy_semantics(self):
-        # Legacy part 2409: inventory 1 + backstock 10 = total_on_hand 11,
+    def test_total_is_floor_plus_backstock(self):
+        # Part 2409: inventory 1 + backstock 10 = 11 on hand,
         # and 11/3 rendered as "367%".
         part = Part.objects.create(
             part_number="2409", short_name="brass wool", min_quantity=3
@@ -80,12 +80,12 @@ class StockDerivationTests(TestCase):
 
 class ApiKeyTests(TestCase):
     def test_generated_token_authenticates_and_is_not_stored(self):
-        key, token = ApiKey.generate("frontdoor")
+        key, token = ApiKey.generate("ioref-web")
         self.assertNotIn(token, key.hashed_key)
         self.assertEqual(ApiKey.authenticate(token), key)
 
     def test_wrong_and_malformed_tokens_rejected(self):
-        _, token = ApiKey.generate("frontdoor")
+        _, token = ApiKey.generate("ioref-web")
         self.assertIsNone(ApiKey.authenticate(token + "x"))
         self.assertIsNone(ApiKey.authenticate("garbage"))
         self.assertIsNone(ApiKey.authenticate(""))
@@ -114,7 +114,7 @@ class ApiTests(TestCase):
             quantity=7,
             observed_at=timezone.now(),
         )
-        _, self.read_token = ApiKey.generate("frontdoor", scope=ApiKey.Scope.READ)
+        _, self.read_token = ApiKey.generate("ioref-web", scope=ApiKey.Scope.READ)
         _, self.write_token = ApiKey.generate("scanner", scope=ApiKey.Scope.WRITE)
 
     def auth(self, token):
@@ -143,7 +143,7 @@ class ApiTests(TestCase):
     def test_needs_restock_filter_runs_in_sql(self):
         self.auth(self.read_token)
         response = self.client.get("/api/v1/parts/?needs_restock=1")
-        # 7 on hand against a minimum of 5 -- not due a restock.
+        # 7 on hand against a minimum of 5, so not due a restock.
         self.assertEqual(response.data["count"], 0)
 
         StockEvent.objects.create(
@@ -272,7 +272,7 @@ class PublicBrowseTests(TestCase):
         self.assertNotContains(self.client.get("/?q=brass"), "soldering heat sink")
 
     def test_low_stock_filter(self):
-        # 5 on hand against a minimum of 2 -- not low.
+        # 5 on hand against a minimum of 2, so not low.
         self.assertNotContains(self.client.get("/?show=low"), "soldering heat sink")
         StockEvent.objects.create(
             part=self.part,
@@ -311,8 +311,8 @@ class PublicBrowseTests(TestCase):
 class GroupTests(TestCase):
     """Classification, kept separate from location.
 
-    The legacy schema had no group field, so "Input: Potentiometers" was stored
-    as a place. A part could not then be reclassified without appearing to move.
+    Separate fields, so a part can be reclassified without appearing to move
+    and moved without appearing to be reclassified.
     """
 
     def setUp(self):
@@ -351,7 +351,7 @@ class GroupTests(TestCase):
             self.pots.delete()
 
     def test_a_part_has_exactly_one_group(self):
-        """Type is singular -- that is what makes 'capacitors below minimum'
+        """Type is singular, which is what makes 'capacitors below minimum'
         and 'which component page owns this' unambiguous."""
         self.assertEqual(self.part.group, self.pots)
         self.assertFalse(hasattr(self.part, "groups"))
@@ -366,8 +366,8 @@ class TagTests(TestCase):
         self.lending = Tag.objects.create(name="lending", slug="lending")
 
     def test_a_soft_pot_is_a_pot_that_is_also_touch(self):
-        """Part 0386: the legacy data filed it under "Touch" because that is how
-        it is used, which lost the fact that it is a potentiometer."""
+        """Part 0386 is a potentiometer that is tagged touch, because touch is
+        what it is for. The group says what it is; the tag says what it is for."""
         part = Part.objects.create(
             part_number="0386", short_name="linear soft potentiometer", group=self.pots
         )
@@ -422,7 +422,7 @@ class GroupApiTests(TestCase):
         response = self.client.get("/api/v1/groups/")
         self.assertEqual(response.status_code, 200)
         counts = {g["slug"]: g["part_count"] for g in response.data["results"]}
-        # part_count saves the frontdoor a request per group.
+        # part_count saves ioref-web a request per group.
         self.assertEqual(counts, {"potentiometers": 2, "capacitors": 1})
 
     def test_tags_are_listable(self):

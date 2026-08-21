@@ -1,6 +1,6 @@
 /* Stock column.
  *
- * Most rows are healthy, so a healthy row gets no decoration at all -- just the
+ * Most rows are healthy, so a healthy row gets no decoration at all, just the
  * number. Only the two exception states are marked, which keeps the eye landing
  * on the rows that need work instead of scanning a wall of pills.
  *
@@ -8,7 +8,7 @@
  * fills; a saturated fill per row is far too loud at list density.
  */
 
-/* Sized against the 18px body set in theme.css -- a small badge beside larger
+/* Sized against the 18px body set in theme.css, a small badge beside larger
  * body text reads as an afterthought, and this is the column staff scan. */
 .stock-value {
   font-variant-numeric: tabular-nums;
@@ -39,13 +39,13 @@
   opacity: 0.8;
 }
 
-/* power crimson -- below minimum */
+/* power crimson, below minimum */
 .stock-flag--restock {
   color: #a01038;
   background: rgb(221 27 80 / 0.11);
 }
 
-/* connector grey -- never counted. An em dash, not a zero: absence of data is
+/* connector grey, never counted. An em dash, not a zero: absence of data is
  * not the same claim as "there are none". */
 .stock-flag--unknown {
   color: #55565a;

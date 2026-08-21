@@ -25,8 +25,7 @@ docker compose up --build     # or containerised
 
 ## Data model
 
-Six tables, replacing the single 42-column `parts` collection of the system
-this succeeded:
+Six tables:
 
 | Model | Purpose |
 |---|---|
@@ -37,35 +36,28 @@ this succeeded:
 | `StockEvent` | Append-only count: `(part, kind, quantity, observed_at)` |
 | `PriceObservation` | Append-only price + supplier + purchase link |
 
-**Why append-only.** The legacy schema stored history as five JSON blobs keyed
-by timestamp (`inventory_history`, `backstock_history`, `price_history`,
-`supplier_history`, `purchase_link_history`), each mirrored by a `current_*`
-column. Three problems, all fixed here:
+**Why append-only.** A count is an observation, not a value to overwrite. Two
+people counting at once each add a row rather than racing to replace one, and a
+correction is a newer count, so what was believed and when survives.
 
-- Every update read the whole blob, mutated it, and wrote it back
-  (`IDeATe-Inventory/app.js:171-206`). Two people counting at once silently
-  lost one count.
-- The `current_*` mirrors were maintained by hand next to the blobs, so they
-  could drift from the history they summarised. They are now derived.
-- Price, supplier, and link were three parallel dicts, so a price could only be
-  tied to its supplier when all three happened to be edited together. They are
-  one row now, so the association is structural.
+Current values are derived (`Part.on_floor`, `.total_on_hand`, `.needs_restock`)
+and annotated in list queries, so a page costs a constant number of queries.
+Nothing stores a running total that could drift from the events under it.
 
-Current values are computed (`Part.on_floor`, `.total_on_hand`, `.needs_restock`)
-and annotated in list queries so a page costs a constant number of queries.
+A price, its supplier and its purchase link are one row, so a price is always
+attributable to who sold it at that price.
 
-`total_on_hand` is floor + backstock and `stock_ratio` is that over
-`min_quantity`, matching the legacy `total_on_hand` and `%_on_hand` columns.
-A part never counted reports `None`, not the legacy `-1` sentinel.
+A part never counted reports `None`. That is not zero, and the difference
+matters when deciding what to reorder.
 
 ## Browsing
 
 `/` serves read-only HTML: a searchable, filterable parts list and a per-part
 page with count history. It exists so the application is useful on its own: a
-deployment with no frontdoor still needs a way to look at its own stock.
+deployment with no site in front of it still needs a way to look at its own stock.
 
-Deliberately unbranded. House styling belongs in whatever frontdoor sits in
-front; ioref-web renders the same data in IDeATe's colours.
+Deliberately unbranded. House styling belongs in whatever site sits in front;
+ioref-web renders the same data in IDeATe's colours.
 
 **Prices and suppliers are shown only to signed-in users.** Stock levels answer
 "do you have any, and where"; what it cost and who sold it is procurement's
@@ -94,15 +86,13 @@ API is unaffected either way.
 Filters on `/parts/`: `status`, `group`, `tag`, `location`, `search`,
 `needs_restock=1`, `part_number__in=a,b,c`.
 
-**Group is not location.** The legacy schema had no classification field, so it
-was stored in the place field: 464 of 1,467 rows carry a location like
-`Input: Potentiometers`. Splitting them means a part can be reclassified without
-appearing to move, and moved without appearing to be reclassified.
+**Group is not location.** They are separate fields so a part can be
+reclassified without appearing to move, and moved without appearing to be
+reclassified.
 
 **Group holds only the fine level.** `Potentiometers`, `Capacitors`, `Diodes`,
-not `Input` or `Output`. The macro level is a physical-computing taxonomy that
-ioref-web owns; the two never agreed anyway, since the largest legacy value,
-`Electrical Components`, is not one of the frontdoor's categories.
+not `Input` or `Output`. The macro level is a physical-computing teaching
+taxonomy that ioref-web owns.
 
 **Group is singular, tags are plural.** A part is one kind of thing, which is
 what makes `?group=capacitors` an unambiguous answer to "every capacitor below
@@ -121,8 +111,7 @@ Create one in the admin under **API keys**. The plaintext is displayed once at
 creation and never again; only a SHA-256 hash is stored. Give ioref-web
 a `read` key.
 
-> The system this replaced kept a live access token as a literal in its
-> source, committed to git. That is what these keys exist not to be.
+> A leak of this repository or its database yields only hashes.
 
 Scopes are `read` (safe methods only) and `write`.
 
@@ -159,8 +148,8 @@ record who counted them.
 
 ## Admin theme
 
-`django-unfold`, themed from the maker-cards palette
-(`maker-cards/public/css/main.scss`), which colour-codes parts by category:
+`django-unfold`, themed with IDeATe's house palette, which colour-codes parts by
+category:
 
 | input | output | controller | connector | power |
 |---|---|---|---|---|
@@ -168,14 +157,14 @@ record who counted them.
 
 Input green is the admin primary; base greys are the site's own neutral scale
 (`#fdfdfd` → `#1d1d1d`) rather than Unfold's blue-tinted Tailwind slate.
-Typography is Nunito Sans, matching `main-layout.hbs`.
+Typography is Nunito Sans.
 
 The stock column decorates only exceptions: crimson for below-minimum, grey for
 never-counted, plain number otherwise. Marking healthy rows too makes the list
 harder to scan and buries the ones needing work.
 
-The palette lives in `settings.MAKER_CARDS_COLORS`; a spin-out deployment
-overrides `UNFOLD["COLORS"]["primary"]` and that dict to rebrand.
+`settings.CATEGORY_COLORS` records the category vocabulary; the admin's own
+scales are `UNFOLD["COLORS"]`. A spin-out deployment replaces both.
 
 ## Tests
 
@@ -187,5 +176,4 @@ uv run python manage.py test
 
 - Staff-facing count-entry form. The admin covers it, but a barcode-friendly
   single-field page is the actual daily workflow.
-- Part sets were a single foreign key in the old schema, so a part could belong
-  to only one. Should be many-to-many in ioref-web.
+- Part sets allow a part in only one set. Should be many-to-many in ioref-web.

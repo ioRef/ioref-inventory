@@ -9,36 +9,30 @@ constraints, and outstanding work.
 
 ## System context
 
-ioref.org was three applications and is becoming two. One replacement has
-landed; the other has not.
+ioref.org is two applications sharing one host:
 
-| Was | Now | Status |
-|---|---|---|
-| **Directus** (`admin.ioref.org`, MySQL `phys_comp_prod`), CMS and identity provider | nothing; identity moved to Shibboleth | shut down |
-| **IDeATe-Inventory** (Express, port 3000) | **ioref-inventory** (this repository) | in production |
-| **maker-cards** (`guides.ioref.org`, Express + Handlebars) | **ioref-web** (Wagtail, separate repository) | not yet built |
+* **ioref-inventory**, this repository, at `/inventory`. Stock.
+* **ioref-web**, a separate repository, at `/`. Guide content, served from flat
+  markdown under `content/`. Django serving files: `INSTALLED_APPS` is
+  `catalog`, `stock` and staticfiles, with no database.
 
-maker-cards still serves `/` on the shared host. Its
-`public/css/main.scss` remains the source of truth for visual design, and the
-printed card deck (`ioRef MakerCards 1.26.22.pdf`) is the authoritative list of
-what the course actually explains. Both are worth consulting before inventing a
-vocabulary or a colour.
-
-`physcomp-drawio-library` (Python, generates drawio shape libraries) is a
-candidate for the LTI work and lives alongside.
+The printed card deck (`ioRef MakerCards 1.26.22.pdf`) is the authoritative list
+of what the course explains, and is worth consulting before inventing a
+vocabulary. `physcomp-drawio-library` generates drawio shape libraries and is a
+candidate for the LTI work.
 
 ### Separation of concerns
 
-The collection this replaced was a 42-column table combining two unrelated
-domains. The split runs along that boundary:
+Stock and guide content are separate domains, and the split runs along that
+boundary:
 
-* **Guide content** belongs to **ioref-web**: the seven `docs_*` fields, images,
-  categories, subcategories, part sets and related parts.
+* **Guide content** belongs to **ioref-web**: write-ups, images, categories,
+  subcategories, part sets and related parts.
 * **Stock** belongs here: counts, backstock, prices, suppliers, locations,
   minimum and maximum quantities.
 
 The two join on `part_number`. The API is keyed on `part_number` rather than on
-surrogate primary keys, so the frontdoor needs no mapping table.
+surrogate primary keys, so ioref-web needs no mapping table.
 
 Guide content must not be added to this repository. The separation exists so
 another organisation can deploy this application with its own parts catalogue.
@@ -101,22 +95,19 @@ nowhere that survives the host.
 
 ## Design decisions
 
-**Append-only history.** The previous schema stored five JSON objects keyed by
-timestamp alongside denormalised `current_*` columns. Each update read the whole
-object, modified it and wrote it back, so concurrent counts silently overwrote
-one another and the denormalised columns could drift from the history they
-summarised. `StockEvent` and `PriceObservation` are append-only; current values
-are derived. Corrections are new observations rather than edits, which preserves
-the audit trail.
+**Append-only history.** A count is an observation, not a value to overwrite.
+`StockEvent` and `PriceObservation` are only ever inserted, and current values
+are derived from them, so two people counting at once each add a row instead of
+racing to replace one, and nothing stores a total that can drift from the events
+under it. A correction is a newer observation, so what was believed and when
+survives it.
 
-**`Group` is separate from `Location`, and holds only the fine level.** The old
-schema had no classification field, so it was smuggled into the place field: 464
-of 1,467 rows carried a location shaped `Input: Potentiometers`. A part could
-not be reclassified without appearing to move, nor moved without appearing to be
-reclassified.
+**`Group` is separate from `Location`, and holds only the fine level.** Two
+fields, so a part can be reclassified without appearing to move and moved
+without appearing to be reclassified.
 
 Only the fine half is inventory's business. The macro half is a physical
-computing teaching taxonomy and belongs to the frontdoor. `Potentiometers`,
+computing teaching taxonomy and belongs to ioref-web. `Potentiometers`,
 `Capacitors` and `Diodes` would mean something to any organisation; `Input` only
 means something to a course.
 
@@ -159,9 +150,8 @@ answerable without ambiguity. Two type-ish tags would break both.
 several hundred "Empty" placeholder rows that its loader discarded for lacking a
 part number, losing the record that the bin exists. Empty bins are rows here.
 
-**`None` is distinct from `0`.** The previous implementation used `-1` as a
-"never counted" sentinel and did arithmetic on it. An uncounted part reports
-`None`.
+**`None` is distinct from `0`.** An uncounted part reports `None`. A sentinel
+that arithmetic can reach turns "we have never looked" into a stock level.
 
 **Authentication is pluggable.** `AUTH_MODE` accepts `local`, `shib` or `oidc`.
 No SAML or OIDC library is imported at module scope, so migrating from
@@ -220,7 +210,7 @@ strips the authentic values and breaks login rather than blocking the forgery.
 complete a browser redirect to an identity provider. `/inventory/admin` uses
 `requireSession 1`; `/inventory/api` uses `AuthType None` with bearer-key
 authentication enforced by DRF. Applying `requireSession 1` to the whole vhost
-breaks the frontdoor.
+breaks ioref-web.
 
 **The public views must stay unbranded.** `inventory/templates/inventory/` and
 `public.css` carry no house styling, because this application is meant to be
@@ -245,7 +235,7 @@ stock Django would not. The version is pinned in `uv.lock`; upgrade deliberately
 
 ## Design language
 
-Derived from `maker-cards/public/css/main.scss`, which is authoritative.
+IDeATe's house palette, shared with the guides site.
 
 * Typeface Nunito Sans. Information pages use 24px bold titles, 22px bold section
   headings, bold labels and 16px body text. The admin matches this scale, raised
@@ -378,10 +368,6 @@ either. A group emptied by reassignment stays as an empty heading.
 
 ## Outstanding work
 
-**ioref-web.** The frontdoor is not built. maker-cards still serves `/`, and
-until it is replaced there is nothing consuming `?group=` or `?tag=`, so the
-vocabulary here is unexercised by a real reader.
-
 **Count-entry interface.** The admin is functional but does not match the
 operational workflow, which is barcode-driven: scan, enter a quantity, advance.
 That wants a single field without pointer input. Unfold's keyboard shortcuts
@@ -392,7 +378,7 @@ configuration.
 
 **Part sets should be many-to-many.** They were a single foreign key in the old
 schema, restricting a part to one set, which is wrong for project component sets
-where a part appears in many. To be addressed in the frontdoor.
+where a part appears in many. To be addressed in ioref-web.
 
 **A second assertion consumer endpoint.** Registering
 `https://inventory.ioref.org/Shibboleth.sso/SAML2/POST` with CMU would let this
@@ -401,6 +387,6 @@ would fix logins on `guides.ioref.org`, which are broken today for the same
 reason. Lead time is with InCommon rather than with us.
 
 **LTI integration.** Under consideration for the drawio library or part sets,
-launched from Canvas. This targets the frontdoor; inventory need only serve the
-API. LTI 1.3 is OIDC-based and launches in an iframe, requiring `SameSite=None`
+launched from Canvas. This targets ioref-web; inventory need only serve the API.
+LTI 1.3 is OIDC-based and launches in an iframe, requiring `SameSite=None`
 cookies.

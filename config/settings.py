@@ -36,7 +36,7 @@ ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")
 
 INSTALLED_APPS = [
-    # Must precede django.contrib.admin -- Unfold overrides its templates, and
+    # Must precede django.contrib.admin. Unfold overrides its templates, and
     # app order is what decides which copy the template loader finds first.
     "unfold",
     "unfold.contrib.filters",
@@ -82,7 +82,7 @@ TEMPLATES = [
 ]
 
 # ---------------------------------------------------------------------------
-# Database -- SQLite by default for portability, per the brief.
+# Database. SQLite by default for portability, per the brief.
 # ---------------------------------------------------------------------------
 DATABASES = {
     "default": env.db_url(
@@ -104,12 +104,12 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 #
 # AUTH_MODE picks how *people* sign in; API keys are always available for
 # service callers regardless. Swapping Shibboleth for Entra is meant to be an
-# env change plus a proxy reconfiguration, not an application change -- which is
+# env change plus a proxy reconfiguration, not an application change, which is
 # why nothing below imports a SAML or OIDC library at module scope.
 #
-#   local  -- Django's own login page. Development, and small spin-out installs.
-#   shib   -- mod_shib terminates SAML upstream and passes attribute headers.
-#   oidc   -- Entra or any OIDC provider (requires mozilla-django-oidc).
+#   local: Django's own login page. Development, and small spin-out installs.
+#   shib:  mod_shib terminates SAML upstream and passes attribute headers.
+#   oidc:  Entra or any OIDC provider (requires mozilla-django-oidc).
 # ---------------------------------------------------------------------------
 AUTH_MODE = env("AUTH_MODE")
 
@@ -158,20 +158,21 @@ AUTH_PASSWORD_VALIDATORS = [
 # ---------------------------------------------------------------------------
 # Admin theme
 #
-# Palette lifted from maker-cards (public/css/main.scss), which colour-codes
-# parts by category: input green, output cyan, controller purple, connector
-# grey, power crimson. Controller purple is the primary here; the rest are kept
-# in INVENTORY_CATEGORY_COLORS so status badges can reuse the same vocabulary
-# staff already read on the guides site and the drawio shape library.
+# IDeATe's house palette, which colour-codes parts by category: input green,
+# output cyan, controller purple, connector grey, power crimson. Kept whole so
+# badges can reuse the vocabulary staff already read on the guides site and in
+# the drawio shape library.
 # ---------------------------------------------------------------------------
-MAKER_CARDS_COLORS = {
+# Reference only. Nothing reads this: the base and primary scales below are
+# written out because Unfold wants a shade per step, and the category colours
+# are used by ioref-web rather than here. It stays because it is the one place
+# the vocabulary is written down, and a rebrand starts by replacing it.
+CATEGORY_COLORS = {
     "input": "#14B04D",
     "output": "#00A0C4",
     "controller": "#4C265B",
     "connector": "#636466",
     "power": "#DD1B50",
-    "off_black": "#1d1d1d",
-    "off_white": "#fdfdfd",
 }
 
 UNFOLD = {
@@ -191,9 +192,9 @@ UNFOLD = {
     "COLORS": {
         # Unfold's default base is Tailwind slate, which is blue-tinted and
         # reads as navy chrome. ioref.org's greys are pure neutral, so this
-        # scale is built from maker-cards' own values: off-white #fdfdfd,
+        # scale is built from the house values: off-white #fdfdfd,
         # grey1 #f2f2f2, grey2 #c4c4c4, connector #636466, grey3 #4f4f4f,
-        # off-black #1d1d1d. Equal R=G=B throughout -- no colour cast.
+        # off-black #1d1d1d. Equal R=G=B throughout, so no colour cast.
         "base": {
             "50": "253 253 253",
             "100": "242 242 242",
@@ -207,7 +208,7 @@ UNFOLD = {
             "900": "29 29 29",
             "950": "18 18 18",
         },
-        # Tints and shades of maker-cards' input green (#14B04D), exact at 500.
+        # Tints and shades of the house input green (#14B04D), exact at 500.
         # Unfold wants space-separated RGB, not hex.
         #
         # 600 is pulled deliberately darker than a smooth ramp would put it
@@ -328,7 +329,7 @@ UNFOLD = {
 # ---------------------------------------------------------------------------
 # Public browsing
 #
-# Read-only HTML views at / so the application is usable without a frontdoor --
+# Read-only HTML views at / so the application is usable with nothing in front
 # the deploy-elsewhere case. Prices and suppliers are withheld from anonymous
 # visitors regardless; see inventory/views.py.
 #
@@ -413,7 +414,7 @@ USE_I18N = True
 USE_TZ = True
 
 # ---------------------------------------------------------------------------
-# Security -- these matter because the app runs behind Apache in production.
+# Security. These matter because the app runs behind Apache in production.
 # ---------------------------------------------------------------------------
 if env("SECURE_PROXY"):
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
