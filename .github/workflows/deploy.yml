@@ -44,6 +44,19 @@ jobs:
       contents: read
 
     steps:
+      # Every podman and systemctl --user call below needs this. The runner
+      # service runs as `deploy` but as a plain systemd unit, not a login
+      # session, so it is not guaranteed to inherit the XDG_RUNTIME_DIR a
+      # real session gets -- and that path is where the Quadlet's rootless
+      # podman keeps its running containers. Without it, commands here can
+      # silently talk to a different (empty) podman context: `healthcheck
+      # run` reports "no such container" for environmental reasons having
+      # nothing to do with whether the deploy actually worked, and the
+      # workflow rolls back a healthy container. Set once, inherited by
+      # every step after this one via GITHUB_ENV.
+      - name: Pin the podman and systemd environment
+        run: echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
+
       - name: Resolve the image to deploy
         id: target
         run: |
@@ -63,7 +76,6 @@ jobs:
 
       - name: Retag and restart
         run: |
-          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
           podman tag "${{ steps.target.outputs.ref }}" "$LOCAL_TAG"
           systemctl --user restart "$UNIT"
 
@@ -86,7 +98,6 @@ jobs:
       - name: Roll back
         if: failure() && steps.health.outcome == 'failure' && steps.current.outputs.digest != ''
         run: |
-          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
           echo "::warning::Restoring ${{ steps.current.outputs.digest }}"
           podman tag "${{ steps.current.outputs.digest }}" "$LOCAL_TAG"
           systemctl --user restart "$UNIT"
