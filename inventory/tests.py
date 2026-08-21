@@ -9,6 +9,7 @@ from rest_framework.test import APIClient
 
 from accounts.models import ApiKey
 from inventory.models import (
+    Category,
     Group,
     Location,
     Part,
@@ -494,11 +495,11 @@ class PartCountLinkTests(TestCase):
     def test_counting_does_not_cost_a_query_per_row(self):
         for n in range(12):
             Group.objects.create(name=f"Group {n}", slug=f"group-{n}")
-        # Session, user, the changelist's two counts, and one for the page of
-        # groups with their part counts annotated on. The number matters less
-        # than the fact that it does not grow with the number of rows: counting
-        # per row would make this 5 + 14.
-        with self.assertNumQueries(5):
+        # Session, user, the category filter's choices, the changelist's two
+        # counts, and one for the page of groups with their part counts
+        # annotated on. The number matters less than the fact that it does not
+        # grow with the number of rows: counting per row would make this 6 + 14.
+        with self.assertNumQueries(6):
             self.client.get("/admin/inventory/group/")
 
 
@@ -707,3 +708,53 @@ class DashboardTests(TestCase):
         recent = list(response.context["recent_counts"])
         self.assertEqual(len(recent), 1)
         self.assertEqual(recent[0].recorded_by, self.user)
+
+
+class CategoryTests(TestCase):
+    """The macro taxonomy: set here, rendered by whoever shows the guides."""
+
+    def setUp(self):
+        self.power = Category.objects.create(name="Power", slug="power")
+        self.resistors = Group.objects.create(
+            name="Resistors", slug="resistor", category=self.power
+        )
+        self.fasteners = Group.objects.create(name="Fasteners", slug="fasteners")
+        Part.objects.create(
+            part_number="0001", short_name="10k resistor", group=self.resistors
+        )
+        Part.objects.create(
+            part_number="0002", short_name="M3 bolt", group=self.fasteners
+        )
+        self.client = APIClient()
+        _, token = ApiKey.generate("ioref-web", scope=ApiKey.Scope.READ)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    def test_a_group_may_have_no_category(self):
+        """Most of the catalogue is not in the curriculum, and should not be."""
+        self.assertIsNone(self.fasteners.category)
+
+    def test_groups_carry_their_category_slug(self):
+        response = self.client.get("/api/v1/groups/")
+        by_slug = {g["slug"]: g for g in response.data["results"]}
+        self.assertEqual(by_slug["resistor"]["category"], "power")
+        self.assertIsNone(by_slug["fasteners"]["category"])
+
+    def test_groups_can_be_filtered_by_category(self):
+        response = self.client.get("/api/v1/groups/?category=power")
+        self.assertEqual([g["slug"] for g in response.data["results"]], ["resistor"])
+
+    def test_parts_can_be_filtered_by_category(self):
+        response = self.client.get("/api/v1/parts/?category=power")
+        numbers = [p["part_number"] for p in response.data["results"]]
+        self.assertEqual(numbers, ["0001"])
+
+    def test_categories_are_listed(self):
+        response = self.client.get("/api/v1/categories/")
+        self.assertEqual([c["slug"] for c in response.data["results"]], ["power"])
+
+    def test_deleting_a_category_leaves_the_group(self):
+        """Retiring a heading must not take the parts filed under it."""
+        self.power.delete()
+        self.resistors.refresh_from_db()
+        self.assertIsNone(self.resistors.category)
+        self.assertEqual(self.resistors.parts.count(), 1)

@@ -12,7 +12,15 @@ from unfold.contrib.filters.admin import RangeDateFilter
 from unfold.decorators import action
 from unfold.widgets import UnfoldAdminTextInputWidget
 
-from .models import Group, Location, Part, PriceObservation, StockEvent, Tag
+from .models import (
+    Category,
+    Group,
+    Location,
+    Part,
+    PriceObservation,
+    StockEvent,
+    Tag,
+)
 
 
 class PartCountColumn:
@@ -324,10 +332,32 @@ class PriceObservationAdmin(AttributesToRecorder, ReturnsToPart, ModelAdmin):
     list_select_related = ("part",)
 
 
+@admin.register(Category)
+class CategoryAdmin(ModelAdmin):
+    """The macro taxonomy. ioref-web decides which of these it shows."""
+
+    list_display = ("name", "slug", "group_count")
+    search_fields = ("name", "slug")
+    prepopulated_fields = {"slug": ("name",)}
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(_ann_groups=Count("groups"))
+
+    @admin.display(description="Groups", ordering="_ann_groups")
+    def group_count(self, obj):
+        if not obj._ann_groups:
+            return obj._ann_groups
+        url = reverse("admin:inventory_group_changelist")
+        query = urlencode({"category__id__exact": obj.pk})
+        return format_html('<a href="{}?{}">{}</a>', url, query, obj._ann_groups)
+
+
 @admin.register(Group)
 class GroupAdmin(PartCountColumn, ModelAdmin):
     parts_lookup = "group__id__exact"
-    list_display = ("name", "slug", "part_count")
+    list_display = ("name", "slug", "category", "part_count")
+    list_filter = ("category",)
+    list_select_related = ("category",)
     search_fields = ("name", "slug")
     prepopulated_fields = {"slug": ("name",)}
 

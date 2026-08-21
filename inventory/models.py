@@ -30,6 +30,31 @@ class Location(models.Model):
         return f"{self.code} ({self.name})" if self.name else self.code
 
 
+class Category(models.Model):
+    """Where a group sits in the guides' navigation: Input, Output, Power.
+
+    A teaching taxonomy rather than a stock-keeping one, kept here because the
+    person who creates a group is the person who knows which category it
+    belongs to, and making them edit a second repository to say so is how a
+    taxonomy goes stale.
+
+    Rows, not code, so a deployment with no guides site leaves the table empty
+    and every group keeps `category = None`. Carries no colour and no ordering:
+    which categories to show and what they look like is ioref-web's decision,
+    and duplicating it here would give two answers to one question.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    slug = models.SlugField(max_length=100, unique=True)
+
+    class Meta:
+        ordering = ("name",)
+        verbose_name_plural = "categories"
+
+    def __str__(self):
+        return self.name
+
+
 class Group(models.Model):
     """What kind of part this is: Potentiometers, Capacitors, Diodes.
 
@@ -38,15 +63,22 @@ class Group(models.Model):
     "which component page covers this part" unambiguous. Two type-ish tags
     would break both.
 
-    Deliberately excludes the macro level. "Input" and "Output" are a
-    physical-computing teaching taxonomy rather than stock-keeping, and belong
-    to ioref-web. Only the fine level is inventory's business, and it is the
-    level that would mean something to any other organisation.
+    The name stays at the fine level. `Potentiometers` and `Capacitors` would
+    mean something to any organisation; `Input` only means something to a
+    course, so the macro level is a separate field rather than part of the name.
     """
 
     name = models.CharField(max_length=100, unique=True)
     slug = models.SlugField(max_length=100, unique=True)
     description = models.TextField(blank=True)
+    category = models.ForeignKey(
+        Category,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="groups",
+        help_text="Where this appears in the guides. Blank means it does not.",
+    )
 
     class Meta:
         ordering = ("name",)

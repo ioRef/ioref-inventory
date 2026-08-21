@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    CategoryViewSet,
     GroupViewSet,
     HealthViewSet,
     LocationViewSet,
@@ -13,6 +14,7 @@ router = DefaultRouter()
 router.register("parts", PartViewSet, basename="part")
 router.register("locations", LocationViewSet, basename="location")
 router.register("groups", GroupViewSet, basename="group")
+router.register("categories", CategoryViewSet, basename="category")
 router.register("tags", TagViewSet, basename="tag")
 router.register("health", HealthViewSet, basename="health")
 

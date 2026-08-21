@@ -26,8 +26,11 @@ candidate for the LTI work.
 Stock and guide content are separate domains, and the split runs along that
 boundary:
 
-* **Guide content** belongs to **ioref-web**: write-ups, images, categories,
-  subcategories, part sets and related parts.
+* **Guide content** belongs to **ioref-web**: write-ups, images, part sets, and
+  the macro taxonomy that files a group under input, output, power, connector
+  or controller. That taxonomy is a teaching decision, it is not derivable from
+  anything here, and it covers only the part of the catalog the course
+  explains. Inventory owes it stable group slugs and nothing else.
 * **Stock** belongs here: counts, backstock, prices, suppliers, locations,
   minimum and maximum quantities.
 
@@ -35,7 +38,7 @@ The two join on `part_number`. The API is keyed on `part_number` rather than on
 surrogate primary keys, so ioref-web needs no mapping table.
 
 Guide content must not be added to this repository. The separation exists so
-another organisation can deploy this application with its own parts catalogue.
+another organization can deploy this application with its own parts catalog.
 CMU-specific values belong in configuration, not in code.
 
 ## Deployment
@@ -106,10 +109,9 @@ survives it.
 fields, so a part can be reclassified without appearing to move and moved
 without appearing to be reclassified.
 
-Only the fine half is inventory's business. The macro half is a physical
-computing teaching taxonomy and belongs to ioref-web. `Potentiometers`,
-`Capacitors` and `Diodes` would mean something to any organisation; `Input` only
-means something to a course.
+Only the fine half is inventory's business. `Potentiometers`, `Capacitors` and
+`Diodes` would mean something to any organization; `Input` only means something
+to a course.
 
 **The group vocabulary was derived once and is now edited by hand.** It came out
 of the migration by taking the head noun of each part's own name, then curating
@@ -214,8 +216,8 @@ breaks ioref-web.
 
 **The public views must stay unbranded.** `inventory/templates/inventory/` and
 `public.css` carry no house styling, because this application is meant to be
-deployable by other organisations. CMU presentation belongs in ioref-web, which
-renders the same data over the API in IDeATe's colours.
+deployable by other organizations. CMU presentation belongs in ioref-web, which
+renders the same data over the API in IDeATe's colors.
 
 **Anonymous visitors must not see prices or suppliers.** `inventory/views.py`
 skips querying them entirely rather than fetching and hiding them in the
@@ -225,7 +227,7 @@ template, so a template change cannot leak them. Covered in `inventory/tests.py`
 needs a `collectstatic` run to resolve `{% static %}`, which is right for a
 deployment and wrong for a test suite; `settings.TESTING` handles it.
 
-**Unfold overrides require `!important`.** Unfold applies sizing and colour
+**Unfold overrides require `!important`.** Unfold applies sizing and color
 through Tailwind utility classes on the elements themselves, which ordinary
 selectors cannot override regardless of specificity. This accounts for the
 `!important` declarations in `inventory/static/inventory/theme.css`.
@@ -242,7 +244,7 @@ IDeATe's house palette, shared with the guides site.
   from Unfold's default 12 to 14px for accessibility.
 * Neutral greys with no blue component: `#fdfdfd`, `#f2f2f2`, `#c4c4c4`,
   `#636466`, `#4f4f4f`, `#1d1d1d`.
-* Category colours: input `#14B04D`, output `#00A0C4`, controller `#4C265B`,
+* Category colors: input `#14B04D`, output `#00A0C4`, controller `#4C265B`,
   connector `#636466`, power `#DD1B50`. Input green is the admin primary.
 * The stock column marks exceptions only: crimson below minimum, grey never
   counted, plain numeral otherwise. Healthy rows are left undecorated so rows
@@ -316,7 +318,7 @@ rejects that with "no image found in manifest list for architecture amd64".
 Re-enable only after confirming prod's podman skips unknown entries.
 
 The image name is written out in lowercase rather than taken from
-`github.repository`, because the organisation is spelled `ioRef` and registry
+`github.repository`, because the organization is spelled `ioRef` and registry
 paths must be lowercase.
 
 `.dockerignore` earns its place: the Dockerfile ends with `COPY . .`, so without
@@ -376,17 +378,9 @@ assist navigation but not data entry. Access control should be enforced in Djang
 with `@login_required` in addition to Apache, so it does not depend on deployment
 configuration.
 
-**Part sets should be many-to-many.** They were a single foreign key in the old
-schema, restricting a part to one set, which is wrong for project component sets
-where a part appears in many. To be addressed in ioref-web.
-
 **A second assertion consumer endpoint.** Registering
 `https://inventory.ioref.org/Shibboleth.sso/SAML2/POST` with CMU would let this
 application move to its own hostname instead of a path on the shared one, and
 would fix logins on `guides.ioref.org`, which are broken today for the same
 reason. Lead time is with InCommon rather than with us.
 
-**LTI integration.** Under consideration for the drawio library or part sets,
-launched from Canvas. This targets ioref-web; inventory need only serve the API.
-LTI 1.3 is OIDC-based and launches in an iframe, requiring `SameSite=None`
-cookies.

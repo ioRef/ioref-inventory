@@ -6,9 +6,18 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from accounts.authentication import ApiKeyUser
-from inventory.models import Group, Location, Part, PriceObservation, StockEvent, Tag
+from inventory.models import (
+    Category,
+    Group,
+    Location,
+    Part,
+    PriceObservation,
+    StockEvent,
+    Tag,
+)
 
 from .serializers import (
+    CategorySerializer,
     GroupSerializer,
     LocationSerializer,
     PartSerializer,
@@ -67,6 +76,8 @@ class PartViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(location__code=location)
         if (group := params.get("group")) is not None:
             queryset = queryset.filter(group__slug=group)
+        if (category := params.get("category")) is not None:
+            queryset = queryset.filter(group__category__slug=category)
         if (tag := params.get("tag")) is not None:
             queryset = queryset.filter(tags__slug=tag)
         if (search := params.get("search")) is not None:
@@ -132,6 +143,14 @@ class LocationViewSet(viewsets.ModelViewSet):
     lookup_value_regex = "[^/]+"
 
 
+class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
+    """The macro taxonomy. ioref-web decides which of these to show."""
+
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+    lookup_field = "slug"
+
+
 class GroupViewSet(viewsets.ReadOnlyModelViewSet):
     """Part kinds. ioref-web builds component pages from these."""
 
@@ -141,7 +160,12 @@ class GroupViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         # part_count saves ioref-web a request per group when it is deciding
         # which groups are worth a component page.
-        return Group.objects.annotate(part_count=Count("parts"))
+        queryset = Group.objects.select_related("category").annotate(
+            part_count=Count("parts")
+        )
+        if (category := self.request.query_params.get("category")) is not None:
+            queryset = queryset.filter(category__slug=category)
+        return queryset
 
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet):

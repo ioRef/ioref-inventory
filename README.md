@@ -80,19 +80,22 @@ API is unaffected either way.
 | `POST` | `/parts/{part_number}/prices/` | write |
 | `GET` | `/locations/` | read |
 | `GET` | `/groups/` | read |
+| `GET` | `/categories/` | read |
 | `GET` | `/tags/` | read |
 | `GET` | `/health/` | none |
 
-Filters on `/parts/`: `status`, `group`, `tag`, `location`, `search`,
-`needs_restock=1`, `part_number__in=a,b,c`.
+Filters on `/parts/`: `status`, `group`, `category`, `tag`, `location`,
+`search`, `needs_restock=1`, `part_number__in=a,b,c`. `/groups/` takes
+`category`.
 
 **Group is not location.** They are separate fields so a part can be
 reclassified without appearing to move, and moved without appearing to be
 reclassified.
 
-**Group holds only the fine level.** `Potentiometers`, `Capacitors`, `Diodes`,
-not `Input` or `Output`. The macro level is a physical-computing teaching
-taxonomy that ioref-web owns.
+**Group holds only the fine level.** `Potentiometers`, `Capacitors`, `Diodes`.
+The macro level is `Category` on the group, optional and usually empty: most of
+the catalogue is stock rather than curriculum. What the categories look like,
+and which are shown, is the guides site's decision.
 
 **Group is singular, tags are plural.** A part is one kind of thing, which is
 what makes `?group=capacitors` an unambiguous answer to "every capacitor below
@@ -163,8 +166,8 @@ The stock column decorates only exceptions: crimson for below-minimum, grey for
 never-counted, plain number otherwise. Marking healthy rows too makes the list
 harder to scan and buries the ones needing work.
 
-`settings.CATEGORY_COLORS` records the category vocabulary; the admin's own
-scales are `UNFOLD["COLORS"]`. A spin-out deployment replaces both.
+The admin's own scales are `UNFOLD["COLORS"]`; a spin-out deployment replaces
+them to rebrand. Category colours belong to whatever renders the categories.
 
 ## Tests
 

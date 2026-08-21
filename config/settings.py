@@ -163,18 +163,6 @@ AUTH_PASSWORD_VALIDATORS = [
 # badges can reuse the vocabulary staff already read on the guides site and in
 # the drawio shape library.
 # ---------------------------------------------------------------------------
-# Reference only. Nothing reads this: the base and primary scales below are
-# written out because Unfold wants a shade per step, and the category colours
-# are used by ioref-web rather than here. It stays because it is the one place
-# the vocabulary is written down, and a rebrand starts by replacing it.
-CATEGORY_COLORS = {
-    "input": "#14B04D",
-    "output": "#00A0C4",
-    "controller": "#4C265B",
-    "connector": "#636466",
-    "power": "#DD1B50",
-}
-
 UNFOLD = {
     "SITE_TITLE": "ioref inventory",
     "SITE_HEADER": "ioref inventory",
@@ -251,6 +239,13 @@ UNFOLD = {
                         "icon": "category",
                         "link": lambda r: reverse_lazy(
                             "admin:inventory_group_changelist"
+                        ),
+                    },
+                    {
+                        "title": "Categories",
+                        "icon": "account_tree",
+                        "link": lambda r: reverse_lazy(
+                            "admin:inventory_category_changelist"
                         ),
                     },
                     {

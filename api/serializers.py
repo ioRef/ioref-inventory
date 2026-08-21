@@ -1,6 +1,14 @@
 from rest_framework import serializers
 
-from inventory.models import Group, Location, Part, PriceObservation, StockEvent, Tag
+from inventory.models import (
+    Category,
+    Group,
+    Location,
+    Part,
+    PriceObservation,
+    StockEvent,
+    Tag,
+)
 
 
 class LocationSerializer(serializers.ModelSerializer):
@@ -9,12 +17,21 @@ class LocationSerializer(serializers.ModelSerializer):
         fields = ("code", "name", "notes", "is_active")
 
 
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ("slug", "name")
+
+
 class GroupSerializer(serializers.ModelSerializer):
     part_count = serializers.IntegerField(read_only=True)
+    # Slug rather than nested, because a consumer rendering a nav has already
+    # fetched /categories/ and only needs to know which one this belongs to.
+    category = serializers.SlugRelatedField(slug_field="slug", read_only=True)
 
     class Meta:
         model = Group
-        fields = ("slug", "name", "description", "part_count")
+        fields = ("slug", "name", "description", "category", "part_count")
 
 
 class TagSerializer(serializers.ModelSerializer):
