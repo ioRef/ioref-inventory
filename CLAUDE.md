@@ -249,11 +249,11 @@ IDeATe's house palette, shared with the guides site.
 * Typeface Nunito Sans. Information pages use 24px bold titles, 22px bold section
   headings, bold labels and 16px body text. The admin matches this scale, raised
   from Unfold's default 12 to 14px for accessibility.
-* Neutral greys with no blue component: `#fdfdfd`, `#f2f2f2`, `#c4c4c4`,
+* Neutral grays with no blue component: `#fdfdfd`, `#f2f2f2`, `#c4c4c4`,
   `#636466`, `#4f4f4f`, `#1d1d1d`.
 * Category colors: input `#14B04D`, output `#00A0C4`, controller `#4C265B`,
   connector `#636466`, power `#DD1B50`. Input green is the admin primary.
-* The stock column marks exceptions only: crimson below minimum, grey never
+* The stock column marks exceptions only: crimson below minimum, gray never
   counted, plain numeral otherwise. Healthy rows are left undecorated so rows
   needing attention stay visible.
 

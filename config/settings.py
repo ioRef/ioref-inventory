@@ -159,7 +159,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # Admin theme
 #
 # IDeATe's house palette, which color-codes parts by category: input green,
-# output cyan, controller purple, connector grey, power crimson. Kept whole so
+# output cyan, controller purple, connector gray, power crimson. Kept whole so
 # badges can reuse the vocabulary staff already read on the guides site and in
 # the drawio shape library.
 # ---------------------------------------------------------------------------
@@ -179,9 +179,9 @@ UNFOLD = {
     },
     "COLORS": {
         # Unfold's default base is Tailwind slate, which is blue-tinted and
-        # reads as navy chrome. ioref.org's greys are pure neutral, so this
+        # reads as navy chrome. ioref.org's grays are pure neutral, so this
         # scale is built from the house values: off-white #fdfdfd,
-        # grey1 #f2f2f2, grey2 #c4c4c4, connector #636466, grey3 #4f4f4f,
+        # gray1 #f2f2f2, gray2 #c4c4c4, connector #636466, gray3 #4f4f4f,
         # off-black #1d1d1d. Equal R=G=B throughout, so no color cast.
         "base": {
             "50": "253 253 253",

@@ -158,11 +158,11 @@ category:
 |---|---|---|---|---|
 | `#14B04D` | `#00A0C4` | `#4C265B` | `#636466` | `#DD1B50` |
 
-Input green is the admin primary; base greys are the site's own neutral scale
+Input green is the admin primary; base grays are the site's own neutral scale
 (`#fdfdfd` → `#1d1d1d`) rather than Unfold's blue-tinted Tailwind slate.
 Typography is Nunito Sans.
 
-The stock column decorates only exceptions: crimson for below-minimum, grey for
+The stock column decorates only exceptions: crimson for below-minimum, gray for
 never-counted, plain number otherwise. Marking healthy rows too makes the list
 harder to scan and buries the ones needing work.
 

@@ -14,7 +14,7 @@ class HeaderAuthenticationMiddleware:
     since sites differ on whether the identity arrives as REMOTE_USER, eppn, or a
     site-specific attribute.
 
-    Two behaviours worth knowing about:
+    Two behaviors worth knowing about:
 
     1. If the header is absent on a request but a header-authenticated session
        exists, the session is torn down. Otherwise a Shibboleth logout would

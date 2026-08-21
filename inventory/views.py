@@ -2,10 +2,10 @@
 
 This exists so the application is useful on its own. ioref-web renders a
 branded version of the same data over the API, but a deployment with nothing in
-front of it, another organisation running this by itself, still needs a way
+front of it, another organization running this by itself, still needs a way
 to look at its own stock.
 
-Deliberately unstyled in anyone's house colours. CMU-specific presentation
+Deliberately unstyled in anyone's house colors. CMU-specific presentation
 belongs in ioref-web; this is neutral so it does not look wrong elsewhere.
 
 Read-only and safe for anonymous access, with one exception: prices and

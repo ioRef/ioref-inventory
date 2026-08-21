@@ -4,7 +4,7 @@
  * number. Only the two exception states are marked, which keeps the eye landing
  * on the rows that need work instead of scanning a wall of pills.
  *
- * Colours are the maker-cards category palette, used as tints rather than solid
+ * Colors are the house category palette, used as tints rather than solid
  * fills; a saturated fill per row is far too loud at list density.
  */
 
@@ -45,7 +45,7 @@
   background: rgb(221 27 80 / 0.11);
 }
 
-/* connector grey, never counted. An em dash, not a zero: absence of data is
+/* connector gray, never counted. An em dash, not a zero: absence of data is
  * not the same claim as "there are none". */
 .stock-flag--unknown {
   color: #55565a;

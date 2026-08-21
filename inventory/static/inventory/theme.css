@@ -1,10 +1,10 @@
-/* Pull the admin toward the ioref.org / maker-cards look.
+/* Pull the admin toward the ioref.org look.
  *
  * Two things Unfold does by default that fight it:
  *   1. Its base palette is Tailwind slate, which is blue-tinted. ioref.org's
- *      greys are pure neutral (#f2f2f2, #c4c4c4, #4f4f4f). Fixed in settings
+ *      grays are pure neutral (#f2f2f2, #c4c4c4, #4f4f4f). Fixed in settings
  *      via UNFOLD["COLORS"]["base"]; this file handles the rest.
- *   2. Zebra-striped rows. maker-cards uses flat backgrounds with hairline
+ *   2. Zebra-striped rows. The house style uses flat backgrounds with hairline
  *      rules, which stays legible at list density without the banding.
  */
 
@@ -29,7 +29,7 @@ button {
 }
 
 /* --- Type scale -----------------------------------------------------------
- * Built from the maker-cards part/info pages and then raised one step for
+ * Built from the house information pages and then raised one step for
  * legibility at a bench: 28px page titles, 24px section headings, 18px body.
  * Unfold ships 12-14px throughout, which is far too small here.
  *
