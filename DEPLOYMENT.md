@@ -1,6 +1,6 @@
 # Production Deployment
 
-ioRef Inventory production runs on **Red Hat Enterprise Linux 9**.
+ioref Inventory production runs on **Red Hat Enterprise Linux 9**.
 
 The application runs as a rootless Podman container under the dedicated
 `deploy` account. Production configuration is stored in
@@ -245,7 +245,7 @@ using your preferred editor and add:
 
 ```ini
 [Unit]
-Description=ioRef Inventory Production
+Description=ioref Inventory Production
 After=network-online.target
 Wants=network-online.target
 
@@ -584,7 +584,7 @@ tweak, since every published `/inventory/...` URL changes.
 
 ## 7. Install the GitHub Actions runner
 
-Register the runner directly to **ioRef/ioref-inventory**.
+Register the runner directly to **ioref/ioref-inventory**.
 
 First create the runner directory:
 
@@ -619,7 +619,7 @@ below.
 
 In GitHub:
 
-1. Open **ioRef/ioref-inventory**.
+1. Open **ioref/ioref-inventory**.
 2. Open **Settings**.
 3. Open **Actions > Runners**.
 4. Select **New self-hosted runner**.
@@ -638,7 +638,7 @@ gave you:
 
 ```bash
 ./config.sh \
-  --url https://github.com/ioRef/ioref-inventory \
+  --url https://github.com/ioref/ioref-inventory \
   --token <TIME-LIMITED-TOKEN>
 ```
 
@@ -941,7 +941,7 @@ sudo -u deploy \
 The self-hosted runner executes repository workflow commands as `deploy`.
 Treat changes to deployment workflows as production access.
 
-- Keep the runner repository-scoped to `ioRef/ioref-inventory`.
+- Keep the runner repository-scoped to `ioref/ioref-inventory`.
 - Do not use a personal account to run the runner.
 - Do not run the runner as root.
 - Do not give `deploy` unrestricted passwordless `sudo`.

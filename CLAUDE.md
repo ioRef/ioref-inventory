@@ -336,9 +336,8 @@ build into a manifest list whose extra entries carry no architecture. Podman
 rejects that with "no image found in manifest list for architecture amd64".
 Re-enable only after confirming prod's podman skips unknown entries.
 
-The image name is written out in lowercase rather than taken from
-`github.repository`, because the organization is spelled `ioRef` and registry
-paths must be lowercase.
+The image name is hardcoded rather than taken from `github.repository`, so it
+doesn't silently change if the repository is ever renamed or transferred.
 
 `.dockerignore` earns its place: the Dockerfile ends with `COPY . .`, so without
 it a build bakes the developer's `data/db.sqlite3`, or a `production.env` holding

@@ -47,7 +47,7 @@ jobs:
       # Every podman and systemctl --user call below needs this. The runner
       # service runs as `deploy` but as a plain systemd unit, not a login
       # session, so it is not guaranteed to inherit the XDG_RUNTIME_DIR a
-      # real session gets -- and that path is where the Quadlet's rootless
+      # real session gets, and that path is where the Quadlet's rootless
       # podman keeps its running containers. Without it, commands here can
       # silently talk to a different (empty) podman context: `healthcheck
       # run` reports "no such container" for environmental reasons having

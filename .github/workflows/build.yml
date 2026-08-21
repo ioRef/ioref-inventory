@@ -1,4 +1,4 @@
-name: build
+name: Build image
 
 # Publishes an OCI image to GHCR for podman to pull on prod.
 #
@@ -13,8 +13,8 @@ on:
   workflow_dispatch:
 
 env:
-  # Lowercase and hardcoded rather than ${{ github.repository }}: the org is
-  # spelled ioRef, and registry paths must be lowercase.
+  # Hardcoded rather than ${{ github.repository }} so this doesn't silently
+  # change if the repository is ever renamed or transferred.
   IMAGE: ghcr.io/ioref/ioref-inventory
 
 jobs:
