@@ -41,6 +41,9 @@ USER ioref
 VOLUME ["/app/data"]
 EXPOSE 8000
 
+# Reads SCRIPT_NAME because gunicorn rejects any request path that does not
+# start with it once the app is mounted under a prefix; a hardcoded
+# /api/v1/health/ 500s in that deployment.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import os,urllib.request,sys; p=os.environ.get('SCRIPT_NAME',''); sys.exit(0 if urllib.request.urlopen(f'http://127.0.0.1:8000{p}/api/v1/health/').status==200 else 1)"
 

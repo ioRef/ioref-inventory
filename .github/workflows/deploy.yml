@@ -1,4 +1,4 @@
-name: deploy
+name: Deploy production
 
 # Manual deploy to production, run on the self-hosted runner on ioref-web-01.
 #
@@ -35,7 +35,10 @@ env:
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    # Targeted by the label the runner is registered with (see DEPLOYMENT.md),
+    # not bare self-hosted, so a second self-hosted runner added for something
+    # else can never pick up a production deploy by accident.
+    runs-on: [self-hosted, linux, ioref-inventory-production]
     environment: production
     permissions:
       contents: read

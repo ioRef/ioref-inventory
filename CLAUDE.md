@@ -30,7 +30,8 @@ boundary:
   every presentation decision, including which categories to show and what
   color they are.
 * **Stock** belongs here: counts, backstock, prices, suppliers, locations,
-  minimum and maximum quantities.
+  minimum and maximum quantities. `Category` also lives here, as the fact that
+  a group belongs to Input or Power; see Design decisions.
 
 The two join on `part_number`. The API is keyed on `part_number` rather than on
 surrogate primary keys, so ioref-web needs no mapping table.
@@ -250,9 +251,9 @@ IDeATe's house palette, shared with the guides site.
   headings, bold labels and 16px body text. The admin matches this scale, raised
   from Unfold's default 12 to 14px for accessibility.
 * Neutral grays with no blue component: `#fdfdfd`, `#f2f2f2`, `#c4c4c4`,
-  `#636466`, `#4f4f4f`, `#1d1d1d`.
-* Category colors: input `#14B04D`, output `#00A0C4`, controller `#4C265B`,
-  connector `#636466`, power `#DD1B50`. Input green is the admin primary.
+  `#636466`, `#4f4f4f`, `#1d1d1d`. Input green (`#14B04D`) is the admin
+  primary. The other category colors are not defined here; see `Category` in
+  Design decisions.
 * The stock column marks exceptions only: crimson below minimum, gray never
   counted, plain numeral otherwise. Healthy rows are left undecorated so rows
   needing attention stay visible.
@@ -304,6 +305,12 @@ the production host pulls that tag through `proxy.andrew.cmu.edu:3128`, retags i
 `localhost/ioref-inventory:production` and restarts the Quadlet. The mutable tag
 exists only on the host, so the registry stays a record of what was built rather
 than a moving target, and rollback is pulling an older sha.
+
+`.github/workflows/deploy.yml` is the manual trigger that does the pull, retag
+and restart, on that same runner. It checks out nothing and does not log in to
+GHCR: the image is public, so `podman pull` needs no credential, and the fewer
+requests the runner makes through the proxy the fewer things need allowing
+there.
 
 The runner executes workflow commands as `deploy`. **Editing a deployment
 workflow is production access**, and should be reviewed as such.

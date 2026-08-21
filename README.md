@@ -2,10 +2,13 @@
 
 Parts inventory: stock levels, locations, prices, suppliers, and their history.
 
-Deliberately knows nothing about guides, categories, maker cards, or images.
-Those live in **ioref-web**, a separate repository that joins to this one
-on `part_number` over the API below. That split is what lets this app be
-deployed by an organization that has its own parts and no interest in ours.
+Deliberately knows nothing about guide content, write-ups, or images. Those
+live in **ioref-web**, a separate repository that joins to this one on
+`part_number` over the API below. This app does hold the category a group
+belongs to (Input, Output, Power...), because that is a fact about the group,
+but the presentation of categories, colors, ordering, which ones to show, is
+ioref-web's decision. That split is what lets this app be deployed by an
+organization that has its own parts and no interest in ours.
 
 ## Quick start
 
@@ -20,17 +23,16 @@ uv run python manage.py runserver
 Admin at `/admin/`, API at `/api/v1/`.
 
 ```bash
-docker compose up --build     # or containerised
+docker compose up --build     # or containerized
 ```
 
 ## Data model
-
-Six tables:
 
 | Model | Purpose |
 |---|---|
 | `Part` | Identity and stocking policy: number, name, unit, min/max, status |
 | `Group` | What kind of part it is. One per part |
+| `Category` | Where a group sits in the guides' nav (Input, Power...). Optional |
 | `Tag` | Cross-cutting facts that are not the type. Many per part |
 | `Location` | Where it lives. First-class, so an empty bin is a row |
 | `StockEvent` | Append-only count: `(part, kind, quantity, observed_at)` |
@@ -151,23 +153,18 @@ record who counted them.
 
 ## Admin theme
 
-`django-unfold`, themed with IDeATe's house palette, which color-codes parts by
-category:
-
-| input | output | controller | connector | power |
-|---|---|---|---|---|
-| `#14B04D` | `#00A0C4` | `#4C265B` | `#636466` | `#DD1B50` |
-
-Input green is the admin primary; base grays are the site's own neutral scale
-(`#fdfdfd` → `#1d1d1d`) rather than Unfold's blue-tinted Tailwind slate.
-Typography is Nunito Sans.
+`django-unfold`, themed in IDeATe's house green (`#14B04D`) as the admin
+primary, over base grays that are the site's own neutral scale (`#fdfdfd` →
+`#1d1d1d`) rather than Unfold's blue-tinted Tailwind slate. Typography is
+Nunito Sans.
 
 The stock column decorates only exceptions: crimson for below-minimum, gray for
 never-counted, plain number otherwise. Marking healthy rows too makes the list
 harder to scan and buries the ones needing work.
 
-The admin's own scales are `UNFOLD["COLORS"]`; a spin-out deployment replaces
-them to rebrand. Category colors belong to whatever renders the categories.
+The scales live in `UNFOLD["COLORS"]`; a spin-out deployment replaces them to
+rebrand. Category colors are not here at all: they belong to whatever renders
+the categories, currently ioref-web.
 
 ## Tests
 

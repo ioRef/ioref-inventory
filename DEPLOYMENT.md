@@ -471,93 +471,19 @@ Do not disable TLS certificate verification as a routine workaround.
 
 # Repository setup
 
-Add the manual production deployment workflow at:
-
-```text
-.github/workflows/deploy-production.yml
-```
-
-The workflow deploys the image already built and pushed by CI:
-
-```text
-ghcr.io/ioref/ioref-inventory:sha-<git-sha>
-```
-
-for the commit being deployed.
-
-A suitable workflow is:
-
-```yaml
----
-name: Deploy production
-
-on:
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  packages: read
-
-jobs:
-  deploy:
-    name: Deploy production
-    runs-on:
-      - self-hosted
-      - linux
-      - ioref-inventory-production
-
-    environment: production
-
-    steps:
-      - name: Select image
-        id: image
-        shell: bash
-        run: |
-          echo "source=ghcr.io/ioref/ioref-inventory:sha-${GITHUB_SHA}" \
-            >> "$GITHUB_OUTPUT"
-
-      - name: Log in to GHCR
-        shell: bash
-        run: |
-          printf '%s' "${{ secrets.GITHUB_TOKEN }}" |
-            podman login ghcr.io \
-              --username "${{ github.actor }}" \
-              --password-stdin
-
-      - name: Pull deployment image
-        shell: bash
-        run: |
-          podman pull "${{ steps.image.outputs.source }}"
-
-      - name: Promote image locally
-        shell: bash
-        run: |
-          podman tag \
-            "${{ steps.image.outputs.source }}" \
-            localhost/ioref-inventory:production
-
-      - name: Restart application
-        shell: bash
-        run: |
-          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
-          systemctl --user daemon-reload
-          systemctl --user restart ioref-inventory-production.service
-
-      - name: Verify application
-        shell: bash
-        run: |
-          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
-          systemctl --user --no-pager status ioref-inventory-production.service
-          podman ps --filter name=ioref-inventory-production
-```
-
-`workflow_dispatch` adds the **Run workflow** button in GitHub Actions.
+The manual production deployment workflow lives in the application repository
+at `.github/workflows/deploy.yml`, not here, so this runbook cannot drift out
+of sync with what actually runs. It triggers on `workflow_dispatch`, targets
+the runner by the `ioref-inventory-production` label set at registration
+below, and deploys `ghcr.io/ioref/ioref-inventory:sha-<git-sha>` for the
+commit selected (or a specific SHA typed into the `sha` input, for a
+deliberate rollback).
 
 Use the `production` GitHub Environment to record production deployments and,
 if desired, require approval before deployment.
 
-If the GHCR package is private, grant the repository's `GITHUB_TOKEN` read
-access to it.
+The GHCR package is public, so nothing needs to be granted to `GITHUB_TOKEN`
+for the pull to succeed.
 
 ---
 
@@ -578,11 +504,14 @@ connection.
 
 It will:
 
-1. authenticate to GHCR;
-2. pull the exact immutable `sha-*` image;
-3. tag that image locally as `localhost/ioref-inventory:production`;
-4. restart the rootless Podman Quadlet; and
-5. report the service status back to GitHub.
+1. pull the exact immutable `sha-*` image (no GHCR login: the package is
+   public, and the runner reaches GitHub through a narrow proxy allowlist, so
+   every request avoided is one fewer thing that needs allowing there);
+2. tag that image locally as `localhost/ioref-inventory:production`;
+3. restart the rootless Podman Quadlet;
+4. poll the container's own healthcheck for up to a minute, rolling back to
+   the previous image if it never turns healthy; and
+5. write a summary of what was deployed back to the run.
 
 After the first successful deployment:
 
@@ -641,25 +570,30 @@ local `production` tag, and restarts the application.
 
 ## 3. Verify
 
-The deployment should finish with:
+The workflow itself waits on the container's healthcheck and fails the run
+if it never turns healthy, rolling back automatically, so a green run is
+already a verified deploy. Confirm from its summary, or on the host:
 
-- `ioref-inventory-production.service` active;
-- the `ioref-inventory` container running; and
-- the image pull and restart succeeding.
+```bash
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+podman ps --filter name=ioref-inventory-production
+```
 
-If the application exposes a health endpoint, verify it here as well.
+should show the container `(healthy)`.
 
 ---
 
 # Rollback
 
-Rollback deploys an older known-good immutable `sha-*` image.
+The workflow rolls back on its own if the new image never becomes healthy,
+restoring whatever was running before it started.
 
-A `sha` input on `workflow_dispatch` can make this selectable directly from
-the GitHub UI.
+For a deliberate rollback to an older, already-healthy release, re-run
+**Deploy production** and fill in the optional `sha` input with the known-good
+commit SHA instead of leaving it to default to the selected ref.
 
-Until then, an emergency manual rollback can be performed on the host as
-`deploy`:
+If GitHub Actions itself is unreachable, an emergency manual rollback can be
+performed on the host as `deploy`:
 
 ```bash
 export HTTP_PROXY=http://proxy.andrew.cmu.edu:3128
