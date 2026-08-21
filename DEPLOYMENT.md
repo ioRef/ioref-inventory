@@ -475,7 +475,7 @@ here.
 ```
 
 A lazy session on `/inventory`: the public part pages are anonymous, but a
-signed-in visitor is recognised. `Require shibboleth` is the provider that
+signed-in visitor is recognized. `Require shibboleth` is the provider that
 permits anonymous access, where `shib-session` would demand one and lock the
 public views.
 
@@ -485,7 +485,7 @@ reverse-proxied application cannot see; headers are what survive the hop to
 gunicorn. ioref-web has no use for them.
 
 `/inventory/admin` requires a live CMU session but not a particular person.
-Authentication is Apache's job and authorisation is Django's, through
+Authentication is Apache's job and authorization is Django's, through
 `is_staff`. `TrustedHeaderBackend` creates no accounts, so an eppn with no row
 resolves to nobody and is sent away as an anonymous visitor without anything
 being written. A name allowlist here as well would mean maintaining the roster

@@ -88,7 +88,7 @@ class TrustedHeaderBackend(BaseBackend):
         return user
 
     def _sync_attributes(self, user, attributes):
-        """Refresh mutable profile fields, leaving authorisation fields alone."""
+        """Refresh mutable profile fields, leaving authorization fields alone."""
         changed = []
 
         email = attributes.get("email", "")

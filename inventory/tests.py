@@ -403,7 +403,7 @@ class GroupApiTests(TestCase):
         _, token = ApiKey.generate("web", scope=ApiKey.Scope.READ)
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
-    def test_part_serialises_its_group_and_tags(self):
+    def test_part_serializes_its_group_and_tags(self):
         response = self.client.get("/api/v1/parts/0386/")
         self.assertEqual(response.data["group"]["slug"], "potentiometers")
         self.assertEqual(response.data["tags"], ["touch"])
