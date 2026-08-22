@@ -26,7 +26,6 @@ concurrency:
 
 env:
   IMAGE: ghcr.io/ioref/ioref-inventory
-  CONTAINER: ioref-inventory-production
   UNIT: ioref-inventory-production.service
   LOCAL_TAG: localhost/ioref-inventory:production
   HTTP_PROXY: http://proxy.andrew.cmu.edu:3128
@@ -48,12 +47,8 @@ jobs:
       # service runs as `deploy` but as a plain systemd unit, not a login
       # session, so it is not guaranteed to inherit the XDG_RUNTIME_DIR a
       # real session gets, and that path is where the Quadlet's rootless
-      # podman keeps its running containers. Without it, commands here can
-      # silently talk to a different (empty) podman context: `healthcheck
-      # run` reports "no such container" for environmental reasons having
-      # nothing to do with whether the deploy actually worked, and the
-      # workflow rolls back a healthy container. Set once, inherited by
-      # every step after this one via GITHUB_ENV.
+      # podman keeps its running containers. Set once, inherited by every
+      # step after this one via GITHUB_ENV.
       - name: Pin the podman and systemd environment
         run: echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
 
@@ -64,12 +59,32 @@ jobs:
           echo "ref=${IMAGE}:sha-${SHA}" >> "$GITHUB_OUTPUT"
           echo "Deploying ${IMAGE}:sha-${SHA}"
 
+      - name: Resolve the container name
+        id: container
+        run: |
+          # Quadlet names the container systemd-<unit-basename> unless the
+          # .container file sets ContainerName= itself, so guessing $UNIT's
+          # basename here is a bet that can quietly be wrong. Quadlet does
+          # always attach a PODMAN_SYSTEMD_UNIT label matching the unit, so
+          # look the name up rather than assume it: a wrong guess makes every
+          # later step below fail with "no such container" regardless of
+          # whether the deploy actually worked, which is exactly what rolled
+          # back a healthy container before this was added.
+          NAME="$(podman ps -a --filter "label=PODMAN_SYSTEMD_UNIT=$UNIT" --format '{{.Names}}' | head -1)"
+          if [ -z "$NAME" ]; then
+            echo "::error::No container carries the label PODMAN_SYSTEMD_UNIT=$UNIT. Is the Quadlet unit installed and named as expected?"
+            exit 1
+          fi
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
       - name: Record what is running now
         id: current
         run: |
+          # The image ID, not the manifest digest: an ID is always a valid
+          # local `podman tag` source, a bare digest is not reliably one.
           # Captured before anything moves, so a failed deploy can put it back.
-          echo "digest=$(podman image inspect "$LOCAL_TAG" \
-            --format '{{.Digest}}' 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
+          echo "id=$(podman image inspect "$LOCAL_TAG" \
+            --format '{{.Id}}' 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
 
       - name: Pull
         run: podman pull "${{ steps.target.outputs.ref }}"
@@ -84,6 +99,7 @@ jobs:
         run: |
           # The image's own healthcheck, so this asks the container the same
           # question podman does rather than inventing a second definition.
+          CONTAINER="${{ steps.container.outputs.name }}"
           for attempt in $(seq 1 30); do
             if podman healthcheck run "$CONTAINER" >/dev/null 2>&1; then
               echo "Healthy after ${attempt} attempt(s)."
@@ -96,10 +112,10 @@ jobs:
           exit 1
 
       - name: Roll back
-        if: failure() && steps.health.outcome == 'failure' && steps.current.outputs.digest != ''
+        if: failure() && steps.health.outcome == 'failure' && steps.current.outputs.id != ''
         run: |
-          echo "::warning::Restoring ${{ steps.current.outputs.digest }}"
-          podman tag "${{ steps.current.outputs.digest }}" "$LOCAL_TAG"
+          echo "::warning::Restoring ${{ steps.current.outputs.id }}"
+          podman tag "${{ steps.current.outputs.id }}" "$LOCAL_TAG"
           systemctl --user restart "$UNIT"
 
       - name: Report
@@ -111,5 +127,5 @@ jobs:
             echo "| | |"
             echo "|---|---|"
             echo "| Image | \`${{ steps.target.outputs.ref }}\` |"
-            echo "| Previous | \`${{ steps.current.outputs.digest || 'none' }}\` |"
+            echo "| Previous | \`${{ steps.current.outputs.id || 'none' }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
