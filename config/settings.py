@@ -167,18 +167,18 @@ UNFOLD = {
     "SITE_TITLE": "ioref inventory",
     "SITE_HEADER": "ioref inventory",
     "SITE_SUBHEADER": "Physical Computing Lab",
-    # Sourced from ioref-web's static/favicon.svg, the canonical ioref mark; if
+    # Sourced from ioref-web's static/icon.svg, the canonical ioref mark; if
     # that changes, re-copy it here. SITE_ICON replaces the SITE_SYMBOL square
     # entirely in Unfold's sidebar template rather than combining with it, so
     # SITE_SYMBOL is gone rather than left set and silently ignored.
-    "SITE_ICON": lambda request: static("inventory/mark.svg"),
+    "SITE_ICON": lambda request: static("inventory/icon.svg"),
     # The browser tab, as distinct from SITE_ICON above (the sidebar logo).
     # Same file, different Unfold setting: one glyph shown two places.
     "SITE_FAVICONS": [
         {
             "rel": "icon",
             "type": "image/svg+xml",
-            "href": lambda request: static("inventory/mark.svg"),
+            "href": lambda request: static("inventory/icon.svg"),
         },
     ],
     "SHOW_HISTORY": True,
