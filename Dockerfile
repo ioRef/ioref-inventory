@@ -44,8 +44,18 @@ EXPOSE 8000
 # Reads SCRIPT_NAME because gunicorn rejects any request path that does not
 # start with it once the app is mounted under a prefix; a hardcoded
 # /api/v1/health/ 500s in that deployment.
+#
+# Sends Host: <first entry of ALLOWED_HOSTS> rather than the connection's own
+# 127.0.0.1:8000, because Django's ALLOWED_HOSTS check runs on the Host header
+# regardless of where the connection actually came from. Any deployment that
+# sets ALLOWED_HOSTS (every production one) otherwise gets a 400 on every
+# single probe, forever, which urlopen raises as an uncaught exception and
+# exits non-zero. Falls back to 127.0.0.1 when ALLOWED_HOSTS is unset, which
+# only matters for a bare local `docker run` with DEBUG=True and nothing
+# else configured; Django itself auto-allows that host in that specific
+# case, independent of what this sends.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import os,urllib.request,sys; p=os.environ.get('SCRIPT_NAME',''); sys.exit(0 if urllib.request.urlopen(f'http://127.0.0.1:8000{p}/api/v1/health/').status==200 else 1)"
+    CMD python -c "import os,urllib.request,sys; p=os.environ.get('SCRIPT_NAME',''); host=os.environ.get('ALLOWED_HOSTS','').split(',')[0].strip() or '127.0.0.1'; req=urllib.request.Request(f'http://127.0.0.1:8000{p}/api/v1/health/', headers={'Host': host}); sys.exit(0 if urllib.request.urlopen(req).status==200 else 1)"
 
 # Two workers: enough that a slow request does not block the next one, few
 # enough that SQLite's single-writer lock stays uncontended.
