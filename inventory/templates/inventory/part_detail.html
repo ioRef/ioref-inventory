@@ -11,7 +11,11 @@
 {% if part.description %}<p class="description">{{ part.description }}</p>{% endif %}
 
 <dl class="facts">
-    <dt>Kind</dt><dd>{{ part.group|default:"—" }}</dd>
+    <dt>Kind</dt>
+    <dd>
+        {{ part.group|default:"—" }}
+        {% if part.group.category %}<span class="category category-{{ part.group.category.slug }}">{{ part.group.category.name }}</span>{% endif %}
+    </dd>
     <dt>Location</dt><dd>{{ part.location|default:"—" }}</dd>
     {% if part.tags.all %}
         <dt>Tags</dt><dd>{% for tag in part.tags.all %}{{ tag }}{% if not forloop.last %}, {% endif %}{% endfor %}</dd>

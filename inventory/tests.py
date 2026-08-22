@@ -267,6 +267,32 @@ class PublicBrowseTests(TestCase):
         self.assertContains(response, "Amazon")
         self.assertContains(response, "2.20")
 
+    def test_a_categorized_group_shows_its_category_badge(self):
+        """category-<slug> is the exact class ioref-web's main.scss keys off,
+        so the two sites read the same badge identically. Nothing exercised
+        this path before: no group had a category assigned when it was
+        written, so a typo in the slug or the template conditional would have
+        shipped silently."""
+        power = Category.objects.get(slug="power")
+        resistors = Group.objects.create(name="Resistors", slug="resistor", category=power)
+        self.part.group = resistors
+        self.part.save()
+
+        for url in ("/", "/parts/0002/"):
+            response = self.client.get(url)
+            self.assertContains(response, 'class="category category-power"')
+            self.assertContains(response, "Power")
+
+    def test_an_uncategorized_group_shows_no_badge(self):
+        """The common case today: Category exists but is not yet populated
+        for most groups, and that must render as "nothing", not an error."""
+        self.part.group = Group.objects.create(name="Resistors", slug="resistor")
+        self.part.save()
+
+        for url in ("/", "/parts/0002/"):
+            response = self.client.get(url)
+            self.assertNotContains(response, "category category-")
+
     def test_search_filters(self):
         Part.objects.create(part_number="0099", short_name="brass wool")
         self.assertContains(self.client.get("/?q=brass"), "brass wool")

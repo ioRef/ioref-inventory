@@ -1,11 +1,16 @@
 /* Public browsing views.
  *
- * Intentionally plain. This application ships to other organizations, so it
- * carries no house styling. ioref-web renders the same data in IDeATe's
- * colors. Neutral grays and a system font stack look deliberate anywhere.
+ * Branded in ioRef's own identity, not IDeATe's: Nunito Sans, the same
+ * neutral grays and category colors ioref-web uses. This stays deployable by
+ * other organizations, because ioRef's brand carries no institution's name or
+ * colors either; see ioref-web's own design language notes. What would not
+ * travel is CMU green, which the Unfold admin uses deliberately and this
+ * page still does not.
  *
  * Type is sized for reading at a bench, matching the decision made for the
  * admin: 18px body rather than the 13-14px a default Django app would use.
+ * ioref-web's own scale is tuned for long-form guide reading instead, so it
+ * is not copied here wholesale, only the typeface and the color tokens.
  */
 
 :root {
@@ -17,6 +22,14 @@
   --hover: #f2f2f2;
   --low: #a01038;
   --low-wash: rgb(221 27 80 / 0.11);
+
+  /* Matches main.scss's color() map exactly, same five slugs and same hex,
+     because they key the same category-<slug> class name convention. */
+  --category-input: #14b04d;
+  --category-output: #00a0c4;
+  --category-controller: #4c265b;
+  --category-connector: #636466;
+  --category-power: #dd1b50;
 }
 
 * { box-sizing: border-box; }
@@ -24,7 +37,7 @@
 body {
   background: var(--ground);
   color: var(--ink);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: "Nunito Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 18px;
   line-height: 1.6;
   margin: 0;
@@ -43,9 +56,38 @@ main { margin: 0 auto; max-width: 68rem; padding: 0 1.25rem 4rem; }
   padding: 1.25rem;
 }
 
-.brand { color: var(--ink); font-size: 1.25rem; font-weight: 700; text-decoration: none; }
+.brand {
+  align-items: center;
+  color: var(--ink);
+  display: flex;
+  font-size: 1.25rem;
+  font-weight: 700;
+  gap: 0.5rem;
+  text-decoration: none;
+}
+.brand img { height: 1.5rem; width: 1.5rem; }
 .topbar nav { color: var(--ink-soft); display: flex; font-size: 0.95rem; gap: 1rem; }
 .who { color: var(--ink-soft); }
+
+/* Same five slugs main.scss keys off, so a category badge reads identically
+   here and on the guides site. White label text, matching main.scss's own
+   category-box-label: the colors are saturated enough that dark text loses
+   contrast against at least two of the five. */
+.category {
+  border-radius: 0.25rem;
+  color: #fff;
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.5rem;
+  white-space: nowrap;
+}
+.category-input { background: var(--category-input); }
+.category-output { background: var(--category-output); }
+.category-controller { background: var(--category-controller); }
+.category-connector { background: var(--category-connector); }
+.category-power { background: var(--category-power); }
 
 h1 { font-size: 1.75rem; font-weight: 700; line-height: 1.25; margin: 0 0 0.25rem; }
 h2 { font-size: 1.35rem; font-weight: 700; margin: 2.5rem 0 0.75rem; }

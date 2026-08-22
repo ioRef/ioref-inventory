@@ -5,16 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Inventory{% endblock %}</title>
     {% comment %}
-        Deliberately unbranded. This application is meant to be deployable by
-        other organizations, so house styling belongs in whatever site sits in
-        front of it. ioref-web renders the same data in IDeATe's colors.
-        Neutral grays and a system font stack look intentional anywhere.
+        Branded as ioRef, not as IDeATe. This application is meant to be
+        deployable by other organizations, and ioRef's own identity (this
+        mark, Nunito Sans, the neutral gray and category-color tokens) has no
+        institution's name or colors in it either; see public.css. What
+        would not travel is CMU green, which stays confined to the Unfold
+        admin. ioref-web renders the same data with the same identity.
     {% endcomment %}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:ital,wght@0,200;0,300;0,400;0,600;0,700;0,800;0,900;1,200;1,300;1,400;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="{% static 'inventory/icon.svg' %}">
     <link rel="stylesheet" href="{% static 'inventory/public.css' %}">
 </head>
 <body>
 <header class="topbar">
-    <a class="brand" href="{% url 'part_list' %}">{{ site_name|default:"Parts inventory" }}</a>
+    <a class="brand" href="{% url 'part_list' %}">
+        <img src="{% static 'inventory/icon.svg' %}" alt="">
+        {{ site_name|default:"Parts inventory" }}
+    </a>
     <nav>
         {% if request.user.is_authenticated %}
             <span class="who">{{ request.user }}</span>

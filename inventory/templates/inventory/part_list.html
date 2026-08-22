@@ -49,7 +49,10 @@
                     {{ part.short_name }}
                     {% if part.status != "active" %}<span class="status">{{ part.get_status_display }}</span>{% endif %}
                 </td>
-                <td>{{ part.group|default:"—" }}</td>
+                <td>
+                    {{ part.group|default:"—" }}
+                    {% if part.group.category %}<span class="category category-{{ part.group.category.slug }}">{{ part.group.category.name }}</span>{% endif %}
+                </td>
                 <td>{{ part.location|default:"—" }}</td>
                 <td class="num">{{ part.on_floor|default_if_none:"—" }}</td>
                 <td class="num">{{ part.in_backstock|default_if_none:"—" }}</td>
