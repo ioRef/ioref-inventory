@@ -589,8 +589,8 @@ Register the runner directly to **ioref/ioref-inventory**.
 First create the runner directory:
 
 ```bash
-mkdir -p /opt/github-actions-runner
-chown deploy:deploy /opt/github-actions-runner
+mkdir -p /opt/github-actions-runner-inventory
+chown deploy:deploy /opt/github-actions-runner-inventory
 ```
 
 Then switch to the `deploy` account:
@@ -602,7 +602,7 @@ sudo -iu deploy
 Once the `deploy` shell opens, change into the runner directory:
 
 ```bash
-cd /opt/github-actions-runner
+cd /opt/github-actions-runner-inventory
 ```
 
 Set the proxy variables for the bootstrap commands:
@@ -614,7 +614,7 @@ export NO_PROXY=.cmu.edu,.cmu.local,localhost,127.0.0.1
 ```
 
 These exports are only for downloading and configuring the runner. The runner's
-persistent proxy configuration is set in `/opt/github-actions-runner/.env`
+persistent proxy configuration is set in `/opt/github-actions-runner-inventory/.env`
 below.
 
 In GitHub:
@@ -630,7 +630,7 @@ token. Use the download, extraction, and configuration commands shown there.
 
 > GitHub's instructions normally begin by creating an `actions-runner`
 > directory and changing into it. Skip those `mkdir` and `cd` commands:
-> `/opt/github-actions-runner` already exists and the `deploy` shell should
+> `/opt/github-actions-runner-inventory` already exists and the `deploy` shell should
 > already be in that directory.
 
 Run the generated `config.sh` command, using the registration token GitHub
@@ -679,7 +679,7 @@ Press Enter for the work folder prompt too (`_work` is fine).
 Before installing or starting the runner service, create:
 
 ```text
-/opt/github-actions-runner/.env
+/opt/github-actions-runner-inventory/.env
 ```
 
 with:
@@ -695,13 +695,13 @@ The runner reads proxy settings from `.env` in its application directory.
 Set ownership:
 
 ```bash
-chown deploy:deploy /opt/github-actions-runner/.env
-chmod 0644 /opt/github-actions-runner/.env
+chown deploy:deploy /opt/github-actions-runner-inventory/.env
+chmod 0644 /opt/github-actions-runner-inventory/.env
 ```
 
 ## 9. Install the runner as a system service
 
-From `/opt/github-actions-runner`, after the runner has been registered:
+From `/opt/github-actions-runner-inventory`, after the runner has been registered:
 
 ```bash
 sudo ./svc.sh install deploy
@@ -725,13 +725,13 @@ runner cannot connect, use the `--check` command shown in GitHub's runner
 troubleshooting documentation and inspect:
 
 ```text
-/opt/github-actions-runner/_diag/
+/opt/github-actions-runner-inventory/_diag/
 ```
 
 Also verify the proxy environment:
 
 ```bash
-sudo -u deploy cat /opt/github-actions-runner/.env
+sudo -u deploy cat /opt/github-actions-runner-inventory/.env
 ```
 
 Do not disable TLS certificate verification as a routine workaround.
@@ -914,14 +914,14 @@ The GitHub Actions runner normally updates itself automatically.
 Check its system service with:
 
 ```bash
-cd /opt/github-actions-runner
+cd /opt/github-actions-runner-inventory
 sudo ./svc.sh status
 ```
 
 Runner diagnostic logs are in:
 
 ```text
-/opt/github-actions-runner/_diag/
+/opt/github-actions-runner-inventory/_diag/
 ```
 
 Check the rootless application service separately:
