@@ -172,6 +172,15 @@ UNFOLD = {
     # entirely in Unfold's sidebar template rather than combining with it, so
     # SITE_SYMBOL is gone rather than left set and silently ignored.
     "SITE_ICON": lambda request: static("inventory/mark.svg"),
+    # The browser tab, as distinct from SITE_ICON above (the sidebar logo).
+    # Same file, different Unfold setting: one glyph shown two places.
+    "SITE_FAVICONS": [
+        {
+            "rel": "icon",
+            "type": "image/svg+xml",
+            "href": lambda request: static("inventory/mark.svg"),
+        },
+    ],
     "SHOW_HISTORY": True,
     "SHOW_VIEW_ON_SITE": False,
     "STYLES": [lambda request: static("inventory/theme.css")],
