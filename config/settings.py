@@ -164,9 +164,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # the drawio shape library.
 # ---------------------------------------------------------------------------
 UNFOLD = {
-    "SITE_TITLE": "ioref inventory",
-    "SITE_HEADER": "ioref inventory",
-    "SITE_SUBHEADER": "Physical Computing Lab",
+    "SITE_TITLE": "IDeATe ioRef Inventory",
+    "SITE_HEADER": "IDeATe",
+    "SITE_SUBHEADER": "ioRef Inventory",
     # Sourced from ioref-web's static/icon.svg, the canonical ioref mark; if
     # that changes, re-copy it here. SITE_ICON replaces the SITE_SYMBOL square
     # entirely in Unfold's sidebar template rather than combining with it, so
