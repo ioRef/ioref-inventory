@@ -9,8 +9,10 @@ Deliberately unstyled in anyone's house colors. CMU-specific presentation
 belongs in ioref-web; this is neutral so it does not look wrong elsewhere.
 
 Read-only and safe for anonymous access, with one exception: prices and
-suppliers are shown only to signed-in staff. Stock levels answer "do you have
-any, and where"; what it cost and who sold it is procurement's business.
+suppliers are shown only to signed-in staff on the HTML pages. Stock levels
+answer "do you have any, and where"; what it cost and who sold it is
+procurement's business. The CSV export at /export.csv is the deliberate
+exception: it is public and carries prices and suppliers.
 """
 
 from django.conf import settings
@@ -18,6 +20,7 @@ from django.db.models import OuterRef, Subquery
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 
+from .export import csv_response
 from .models import Part, StockEvent
 
 
@@ -60,6 +63,11 @@ def part_list(request):
             "may_see_costs": _may_see_costs(request),
         },
     )
+
+
+def export_csv(request):
+    _browsable()
+    return csv_response()
 
 
 def part_detail(request, part_number):

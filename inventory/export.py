@@ -11,7 +11,11 @@ tests here pin the same cases.
 import csv
 import re
 
-from .models import PriceObservation
+from django.db.models import Prefetch
+from django.http import HttpResponse
+from django.utils import timezone
+
+from .models import Part, PriceObservation
 
 SAFE_SCHEMES = {"http", "https", "mailto", "tel"}
 SCHEME = re.compile(r"^([a-zA-Z][a-zA-Z0-9+.-]*):")
@@ -57,7 +61,8 @@ def _row(part):
         part.part_number,
         part.short_name,
         part.description,
-        part.location.name if part.location else "",
+        part.label_text,
+        str(part.location) if part.location else "",
         part.status,
         _money(observation.price) if observation else "",
         observation.observed_at.date().isoformat() if observation else "",
@@ -71,7 +76,6 @@ def _row(part):
         part.supplier_part_num,
         part.group.name if part.group else "",
         part.category.name if part.category else "",
-        part.label_text,
     ]
 
 
@@ -79,6 +83,7 @@ HEADER = [
     "Part number",
     "Part name",
     "Description",
+    "Label text",
     "Location",
     "Status",
     "Price",
@@ -93,8 +98,25 @@ HEADER = [
     "Supplier part number",
     "Group",
     "Category",
-    "Label text",
 ]
+
+
+def export_queryset():
+    return Part.objects.select_related("location", "group", "category").prefetch_related(
+        Prefetch(
+            "price_observations",
+            queryset=PriceObservation.objects.order_by("-observed_at", "-id"),
+        )
+    )
+
+
+def csv_response():
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = (
+        f'attachment; filename="ioref-catalog-{timezone.localdate():%Y-%m-%d}.csv"'
+    )
+    write_inventory_csv(response, export_queryset())
+    return response
 
 
 def write_inventory_csv(stream, parts):

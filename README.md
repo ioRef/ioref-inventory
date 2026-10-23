@@ -65,6 +65,9 @@ ioref-web renders the same data in IDeATe's colors.
 "do you have any, and where"; what it cost and who sold it is procurement's
 business. The view does not query them at all for anonymous visitors.
 
+The exception is the CSV at `/export.csv`, which anyone can download. It
+includes prices, suppliers and purchase links, by design.
+
 Set `PUBLIC_BROWSE=False` to require a login for the HTML views entirely. The
 API is unaffected either way.
 

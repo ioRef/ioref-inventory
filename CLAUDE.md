@@ -236,6 +236,11 @@ renders the same data over the API in IDeATe's colors.
 skips querying them entirely rather than fetching and hiding them in the
 template, so a template change cannot leak them. Covered in `inventory/tests.py`.
 
+The one deliberate exception is the public CSV at `/export.csv`, which includes
+prices, suppliers and purchase links for every part. The owner has decided this
+data is not proprietary and the export exists to seed other institutions' labs.
+The HTML views above still withhold them.
+
 **The static storage backend is swapped during tests.** The manifest storage
 needs a `collectstatic` run to resolve `{% static %}`, which is right for a
 deployment and wrong for a test suite; `settings.TESTING` handles it.

@@ -928,7 +928,7 @@ class ExportTests(TestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "text/csv; charset=utf-8")
-        self.assertIn("attachment; filename=\"ioref-inventory-", response["Content-Disposition"])
+        self.assertIn("attachment; filename=\"ioref-catalog-", response["Content-Disposition"])
         return list(csv.reader(io.StringIO(response.content.decode())))
 
     def as_dicts(self):
@@ -985,3 +985,43 @@ class ExternalHrefTests(SimpleTestCase):
         for value, expected in cases.items():
             with self.subTest(value=value):
                 self.assertEqual(external_href(value), expected)
+
+
+class PublicExportTests(TestCase):
+    def setUp(self):
+        self.bench = Location.objects.create(code="B1-R1-C1")
+        self.part = Part.objects.create(
+            part_number="0074",
+            short_name="Polypropylene capacitor",
+            description="capacitor, Polypropylene, 0.22µF",
+            label_text="polyprop 0.22",
+            location=self.bench,
+        )
+
+    def test_anonymous_download_is_csv_with_label_after_description(self):
+        response = self.client.get("/export.csv")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/csv; charset=utf-8")
+        header, row = list(csv.reader(io.StringIO(response.content.decode("utf-8"))))[:2]
+        self.assertEqual(header.index("Label text"), header.index("Description") + 1)
+        self.assertEqual(row[header.index("Label text")], "polyprop 0.22")
+        self.assertEqual(row[header.index("Description")], "capacitor, Polypropylene, 0.22µF")
+
+    def test_location_falls_back_to_code(self):
+        response = self.client.get("/export.csv")
+        header, row = list(csv.reader(io.StringIO(response.content.decode("utf-8"))))[:2]
+        self.assertEqual(row[header.index("Location")], "B1-R1-C1")
+
+    def test_unicode_survives_round_trip_as_utf8(self):
+        response = self.client.get("/export.csv")
+        self.assertIn("µF".encode("utf-8"), response.content)
+
+    def test_link_on_public_list(self):
+        response = self.client.get("/")
+        self.assertContains(response, "Download CSV of full ioRef catalog")
+        self.assertContains(response, 'href="/export.csv"')
+
+    @override_settings(PUBLIC_BROWSE=False)
+    def test_export_follows_public_browse_setting(self):
+        self.assertEqual(self.client.get("/export.csv").status_code, 404)

@@ -51,6 +51,8 @@
 
 <p class="part-count">{{ total }} part{{ total|pluralize }}</p>
 
+<p><a href="{% url 'export_csv' %}">Download CSV of full ioRef catalog</a></p>
+
 <style>
 .spreadsheet-controls {
     display: flex;
