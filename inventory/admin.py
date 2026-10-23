@@ -1,10 +1,13 @@
+import logging
 from urllib.parse import urlparse
 
 from django import forms
 from django.contrib import admin
-from django.db.models import Count
+from django.db.models import Count, Prefetch
+from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.http import urlencode
 from unfold.admin import ModelAdmin, TabularInline
@@ -12,6 +15,7 @@ from unfold.contrib.filters.admin import RangeDateFilter
 from unfold.decorators import action
 from unfold.widgets import UnfoldAdminSelect2Widget
 
+from .export import write_inventory_csv
 from .models import (
     Category,
     Group,
@@ -21,6 +25,8 @@ from .models import (
     StockEvent,
     Tag,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class PartCountColumn:
@@ -176,6 +182,7 @@ class PartAdmin(ModelAdmin):
     # well-counted part is a long way down a page nobody wants to scroll
     # while holding a barcode scanner.
     actions_detail = ["record_count", "record_price"]
+    actions_list = ["export_csv"]
 
     list_display = (
         "part_number",
@@ -214,6 +221,22 @@ class PartAdmin(ModelAdmin):
     @action(description="Record price", icon="payments", url_path="record-price")
     def record_price(self, request, object_id):
         return self._add_for_part(PriceObservation, object_id)
+
+    @action(description="Export CSV", icon="download", url_path="export-csv")
+    def export_csv(self, request):
+        parts = Part.objects.select_related("location", "group", "category").prefetch_related(
+            Prefetch(
+                "price_observations",
+                queryset=PriceObservation.objects.order_by("-observed_at", "-id"),
+            )
+        )
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = (
+            f'attachment; filename="ioref-inventory-{timezone.localdate():%Y-%m-%d}.csv"'
+        )
+        write_inventory_csv(response, parts)
+        logger.info("Inventory CSV exported by %s", request.user)
+        return response
 
     def _add_for_part(self, model, object_id):
         """Open the child's add form with the part already chosen.

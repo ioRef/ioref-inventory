@@ -1,15 +1,19 @@
+import csv
+import io
 from datetime import timedelta
+from decimal import Decimal
 
 from django.contrib.admin import site
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
-from django.test import RequestFactory, TestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts.models import ApiKey
 from inventory.admin import PartAdminForm
+from inventory.export import external_href
 from inventory.models import (
     Category,
     Group,
@@ -881,3 +885,103 @@ class CategoryTests(TestCase):
         self.resistors.refresh_from_db()
         self.assertIsNone(self.resistors.category)
         self.assertEqual(self.resistors.parts.count(), 1)
+
+
+class ExportTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="admin@andrew.cmu.edu", password="x"
+        )
+        self.client.force_login(self.user)
+        self.bench = Location.objects.create(code="bench", name="Soldering bench")
+        self.part = Part.objects.create(
+            part_number="1829",
+            short_name="Shoulder screw",
+            description="=HYPERLINK(\"http://evil\")",
+            location=self.bench,
+            min_quantity=3,
+            manufacturer="McMaster-Carr",
+        )
+        PriceObservation.objects.create(
+            part=self.part,
+            price=Decimal("0.08380"),
+            supplier="McMaster-Carr",
+            purchase_link="mcmaster.com/#92095A182",
+            observed_at=timezone.now() - timedelta(days=30),
+        )
+        PriceObservation.objects.create(
+            part=self.part,
+            price=Decimal("0.09000"),
+            supplier="McMaster-Carr",
+            purchase_link="mcmaster.com/#92095A182",
+            observed_at=timezone.now(),
+        )
+        StockEvent.objects.create(
+            part=self.part,
+            kind=StockEvent.Kind.INVENTORY,
+            quantity=42,
+            observed_at=timezone.now(),
+        )
+        self.url = reverse("admin:inventory_part_changelist") + "export-csv/"
+
+    def fetch_rows(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/csv; charset=utf-8")
+        self.assertIn("attachment; filename=\"ioref-inventory-", response["Content-Disposition"])
+        return list(csv.reader(io.StringIO(response.content.decode())))
+
+    def as_dicts(self):
+        rows = self.fetch_rows()
+        return rows[0], dict(zip(rows[0], rows[1]))
+
+    def test_requires_staff(self):
+        self.client.logout()
+        response = self.client.get(self.url)
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_one_row_per_part_under_a_header(self):
+        rows = self.fetch_rows()
+        self.assertEqual(rows[0][0], "Part number")
+        self.assertEqual(len(rows), 2)
+
+    def test_latest_price_and_normalized_link(self):
+        header, row = self.as_dicts()
+        self.assertEqual(row["Price"], "0.09")
+        self.assertEqual(row["Purchase URL"], "https://mcmaster.com/#92095A182")
+        self.assertEqual(row["Vendor"], "McMaster-Carr")
+
+    def test_stock_counts_are_not_exported(self):
+        header, row = self.as_dicts()
+        self.assertNotIn("42", row.values())
+        self.assertFalse(any("floor" in h.lower() or "backstock" in h.lower() for h in header))
+
+    def test_formula_cells_are_neutralised(self):
+        header, row = self.as_dicts()
+        self.assertEqual(row["Description"], "'=HYPERLINK(\"http://evil\")")
+
+    def test_empty_optionals_are_blank(self):
+        header, row = self.as_dicts()
+        self.assertEqual(row["Maximum"], "")
+        self.assertEqual(row["Group"], "")
+        self.assertEqual(row["Minimum"], "3")
+
+
+class ExternalHrefTests(SimpleTestCase):
+    """Same cases as ioref-web's catalog/test_links.py: the rule is duplicated."""
+
+    def test_rule(self):
+        cases = {
+            "mcmaster.com/#92095A182": "https://mcmaster.com/#92095A182",
+            "example.com:8080/x": "https://example.com:8080/x",
+            "//cdn.example.com/y": "https://cdn.example.com/y",
+            "https://www.digikey.com/x": "https://www.digikey.com/x",
+            "mailto:sales@example.com": "mailto:sales@example.com",
+            "/parts/1829/": "/parts/1829/",
+            "javascript:alert(1)": "",
+            "shelf 3": "",
+            "": "",
+        }
+        for value, expected in cases.items():
+            with self.subTest(value=value):
+                self.assertEqual(external_href(value), expected)
