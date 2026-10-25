@@ -1,0 +1,487 @@
+{% extends "admin/base_site.html" %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .sheet-top { margin: .5rem 0 .75rem; }
+  .sheet-status { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.25rem; margin-bottom: .75rem; }
+  .status-strong { font-weight: 700; font-size: 1rem; }
+  .sheet-actions { display: flex; gap: .4rem; flex-wrap: wrap; }
+  .card { border: 1px solid #c4c4c4; border-radius: 6px; padding: .75rem 1rem; background: #fff; margin-bottom: .75rem; }
+  .card h2 { font-size: .95rem; margin: 0 0 .6rem; color: #1d1d1d; }
+  .edit-row { display: flex; flex-wrap: wrap; gap: .6rem; align-items: flex-end; }
+  .edit-row label { display: flex; flex-direction: column; gap: .2rem; font-size: .8rem; color: #636466; }
+  .edit-row input, .edit-row select { min-width: 14rem; padding: .4rem .5rem; font-size: .95rem; }
+  .btn { padding: .4rem .8rem; font-size: .9rem; cursor: pointer; }
+  .btn.primary { background: #0c8138; border-color: #0c8138; color: #fff; }
+  .btn[disabled] { opacity: .45; cursor: not-allowed; }
+  .undo-row { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin-bottom: .5rem; }
+  .fold { margin: .4rem 0; }
+  .fold summary { cursor: pointer; font-weight: 600; font-size: .9rem; padding: .25rem 0; }
+  .history { border: 1px solid #c4c4c4; border-radius: 4px; padding: .5rem .75rem; margin-top: .4rem; font-size: .88rem; background: #fdfdfd; max-height: 14rem; overflow: auto; }
+  .column-bar { display: flex; flex-wrap: wrap; gap: .4rem .9rem; padding: .4rem 0; font-size: .9rem; }
+  .column-choice { display: inline-flex; align-items: center; gap: .3rem; }
+  .muted { color: #636466; }
+  .error-text { color: #b00020; }
+  .batch-note { margin: .4rem 0; }
+  .preview-table { margin-top: .6rem; font-size: .88rem; border-collapse: collapse; }
+  .preview-table td, .preview-table th { padding: .25rem .6rem; border-bottom: 1px solid #f2f2f2; text-align: left; }
+  .history .entry { padding: .2rem 0; border-bottom: 1px solid #f2f2f2; }
+  .history .entry:last-child { border-bottom: none; }
+  .history .change { padding-left: 1.5rem; color: #1d1d1d; }
+  .history .latest { font-weight: 600; }
+  .history .struck { text-decoration: line-through; color: #636466; }
+  .grid-wrap { overflow: auto; max-height: 70vh; border: 1px solid #c4c4c4; border-radius: 4px; }
+  table.bulk-sheet { table-layout: fixed; width: max-content; min-width: 100%; border-collapse: collapse; font-size: .9rem; background: #fdfdfd; }
+  table.bulk-sheet th, table.bulk-sheet td { padding: .35rem .5rem; border-bottom: 1px solid #f2f2f2; border-right: 1px solid #f2f2f2; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  table.bulk-sheet thead th { position: sticky; top: 0; background: #f2f2f2; z-index: 1; cursor: pointer; user-select: none; }
+  table.bulk-sheet thead tr.filters th { top: 2.3rem; background: #fdfdfd; cursor: default; }
+  table.bulk-sheet thead input { width: 100%; box-sizing: border-box; font-size: .85rem; padding: .2rem .3rem; }
+  table.bulk-sheet tr.selected td { background: #eef8f1; }
+  table.bulk-sheet td.multiline { white-space: pre-wrap; overflow-wrap: anywhere; overflow: visible; text-overflow: clip; vertical-align: top; }
+  table.bulk-sheet td.editable { cursor: cell; }
+  table.bulk-sheet input.cell-editor, table.bulk-sheet select.cell-editor { width: 100%; box-sizing: border-box; font-size: .9rem; padding: .15rem .3rem; }
+  table.bulk-sheet thead th[draggable] { cursor: grab; }
+  table.bulk-sheet thead th.drop-target { box-shadow: inset 3px 0 0 #0c8138; }
+  table.bulk-sheet .sticky-check, table.bulk-sheet .sticky-part { position: sticky; background: #fdfdfd; z-index: 2; }
+  table.bulk-sheet .sticky-check { left: 0; }
+  table.bulk-sheet .sticky-part { left: 36px; }
+  table.bulk-sheet thead th.sticky-check, table.bulk-sheet thead th.sticky-part { background: #f2f2f2; z-index: 4; }
+  table.bulk-sheet thead tr.filters th.sticky-check, table.bulk-sheet thead tr.filters th.sticky-part { background: #fdfdfd; z-index: 4; }
+  table.bulk-sheet tr.selected td.sticky-check, table.bulk-sheet tr.selected td.sticky-part { background: #eef8f1; }
+  .part-number { font-family: monospace; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sheet-top">
+  <div class="sheet-status">
+    <span class="status-strong" id="selection-count">0 selected</span>
+    <span class="muted" id="visible-count"></span>
+    <span class="sheet-actions">
+      <button type="button" class="btn" id="select-visible">Select all shown</button>
+      <button type="button" class="btn" id="clear-selection">Clear selection</button>
+      <button type="button" class="btn" id="clear-filters">Clear filters</button>
+    </span>
+  </div>
+
+  <section class="card">
+    <h2>Set a field on the selected parts</h2>
+    <div class="edit-row">
+      <label>Field <select id="bulk-field"></select></label>
+      <label>New value
+        <input type="text" id="bulk-value" list="bulk-suggestions" placeholder="empty clears optional fields">
+        <select id="bulk-choice" hidden></select>
+      </label>
+      <button type="button" class="btn" id="preview-btn" disabled data-url="{% url 'admin:inventory_part_grid_preview' %}" data-data-url="{% url 'admin:inventory_part_grid_data' %}">Preview</button>
+      <button type="button" class="btn primary" id="apply-btn" disabled data-url="{% url 'admin:inventory_part_grid_apply' %}">Apply</button>
+    </div>
+    <datalist id="bulk-suggestions"></datalist>
+    <div id="preview"></div>
+  </section>
+
+  <div class="undo-row">
+    <button type="button" class="btn" id="undo-btn" disabled data-url="{% url 'admin:inventory_part_grid_undo' %}">Undo last edit</button>
+    <span class="muted" id="undo-label"></span>
+  </div>
+
+  <details class="fold">
+    <summary>Recent changes</summary>
+    <div class="history" id="history" data-url="{% url 'admin:inventory_part_grid_history' %}"></div>
+  </details>
+
+  <details class="fold">
+    <summary>Show columns</summary>
+    <div class="column-bar" id="column-bar"></div>
+  </details>
+  <input type="hidden" id="cell-url" data-url="{% url 'admin:inventory_part_grid_cell' %}">
+</div>
+
+<div class="grid-wrap">
+  <table class="bulk-sheet" id="sheet">
+    <thead>
+      <tr id="header-row"></tr>
+      <tr class="filters" id="filter-row"></tr>
+    </thead>
+    <tbody id="body"></tbody>
+  </table>
+</div>
+
+<script>
+(function () {
+  const LABELS = {
+    part_number: "Part number", group: "Group", short_name: "Part name", description: "Description",
+    label_text: "Label text", status: "Status", unit: "Unit", location: "Location",
+    min_quantity: "Minimum", max_quantity: "Maximum", manufacturer: "Manufacturer",
+    manufacturer_part_num: "Manufacturer part no.", supplier_part_num: "Supplier part no.",
+  };
+  const state = { columns: [], editable: [], rows: [], selected: new Set(), filters: {}, hidden: new Set(), order: [], sortKey: "part_number", sortDir: 1 };
+  const el = (id) => document.getElementById(id);
+  const csrf = () => (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || "";
+
+  function post(url, body) {
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() },
+      body: JSON.stringify(body),
+    }).then((r) => r.json().then((data) => ({ ok: r.ok, data })));
+  }
+
+  function visibleRows() {
+    const keys = Object.keys(state.filters).filter((k) => state.filters[k]);
+    return state.rows
+      .filter((row) => keys.every((k) => String(row[k]).toLowerCase().includes(state.filters[k].toLowerCase())))
+      .sort((a, b) => {
+        const x = String(a[state.sortKey]).toLowerCase(), y = String(b[state.sortKey]).toLowerCase();
+        return (x < y ? -1 : x > y ? 1 : 0) * state.sortDir;
+      });
+  }
+
+  const WIDTHS = { check: 36, part_number: 110, group: 150, description: 320, default: 170 };
+  const PINNED = "part_number";
+
+  function visibleCols() {
+    return state.order.filter((c) => c === PINNED || !state.hidden.has(c));
+  }
+
+  function moveColumn(from, to) {
+    if (from === to || to === PINNED) return;
+    const rest = state.order.filter((c) => c !== from);
+    rest.splice(rest.indexOf(to), 0, from);
+    state.order = rest;
+  }
+
+  function pinClass(col) {
+    return col === "check" ? "sticky-check" : col === PINNED ? "sticky-part" : "";
+  }
+
+  function renderColumns() {
+    const sheet = el("sheet");
+    const old = sheet.querySelector("colgroup");
+    if (old) old.remove();
+    const group = document.createElement("colgroup");
+    ["check"].concat(visibleCols()).forEach((c) => {
+      const col = document.createElement("col");
+      col.style.width = (WIDTHS[c] || WIDTHS.default) + "px";
+      group.appendChild(col);
+    });
+    sheet.insertBefore(group, sheet.firstChild);
+  }
+
+  function renderChooser() {
+    const bar = el("column-bar");
+    bar.innerHTML = '<span class="muted">Show columns:</span>';
+    state.order.filter((c) => c !== PINNED).forEach((col) => {
+      const label = document.createElement("label");
+      label.className = "column-choice";
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = !state.hidden.has(col);
+      box.addEventListener("change", () => {
+        if (box.checked) {
+          state.hidden.delete(col);
+        } else {
+          state.hidden.add(col);
+          delete state.filters[col];
+        }
+        render();
+      });
+      label.appendChild(box);
+      label.appendChild(document.createTextNode(" " + (LABELS[col] || col)));
+      bar.appendChild(label);
+    });
+  }
+
+  function renderHeader() {
+    renderColumns();
+    const head = el("header-row"), filters = el("filter-row");
+    head.innerHTML = ""; filters.innerHTML = "";
+    const check = document.createElement("th");
+    check.className = "sticky-check";
+    check.innerHTML = '<input type="checkbox" id="check-all" aria-label="Select all shown">';
+    head.appendChild(check);
+    const fcheck = document.createElement("th");
+    fcheck.className = "sticky-check";
+    filters.appendChild(fcheck);
+    visibleCols().forEach((col) => {
+      const th = document.createElement("th");
+      th.className = pinClass(col);
+      th.textContent = LABELS[col] + (state.sortKey === col ? (state.sortDir > 0 ? " ▲" : " ▼") : "");
+      if (col !== PINNED) {
+        th.draggable = true;
+        th.addEventListener("dragstart", (e) => {
+          e.dataTransfer.setData("text/plain", col);
+          e.dataTransfer.effectAllowed = "move";
+        });
+        th.addEventListener("dragover", (e) => {
+          if (col === PINNED) return;
+          e.preventDefault();
+          th.classList.add("drop-target");
+        });
+        th.addEventListener("dragleave", () => th.classList.remove("drop-target"));
+        th.addEventListener("drop", (e) => {
+          e.preventDefault();
+          const from = e.dataTransfer.getData("text/plain");
+          if (from) { moveColumn(from, col); render(); }
+        });
+      }
+      th.addEventListener("click", () => {
+        state.sortDir = state.sortKey === col ? -state.sortDir : 1;
+        state.sortKey = col; render();
+      });
+      head.appendChild(th);
+      const fth = document.createElement("th");
+      fth.className = pinClass(col);
+      const input = document.createElement("input");
+      input.placeholder = "filter";
+      input.value = state.filters[col] || "";
+      input.addEventListener("input", () => { state.filters[col] = input.value; renderBody(); renderBulkBar(); });
+      fth.appendChild(input); filters.appendChild(fth);
+    });
+    el("check-all").addEventListener("change", (e) => {
+      visibleRows().forEach((row) => e.target.checked ? state.selected.add(row.id) : state.selected.delete(row.id));
+      render();
+    });
+  }
+
+  function renderBody() {
+    const body = el("body"); body.innerHTML = "";
+    const rows = visibleRows();
+    const cols = visibleCols();
+    rows.forEach((row) => {
+      const tr = document.createElement("tr");
+      if (state.selected.has(row.id)) tr.classList.add("selected");
+      const box = document.createElement("td");
+      box.className = "sticky-check";
+      const input = document.createElement("input");
+      input.type = "checkbox"; input.checked = state.selected.has(row.id);
+      input.addEventListener("change", () => {
+        input.checked ? state.selected.add(row.id) : state.selected.delete(row.id);
+        render();
+      });
+      box.appendChild(input); tr.appendChild(box);
+      cols.forEach((col) => {
+        const td = document.createElement("td");
+        td.textContent = row[col];
+        const classes = [pinClass(col)];
+        if (state.editable.includes(col)) {
+          classes.push("editable");
+          td.addEventListener("dblclick", () => startEdit(td, row, col));
+        }
+        if (col === "part_number") classes.push("part-number");
+        if (col === "description") classes.push("multiline");
+        td.className = classes.filter(Boolean).join(" ");
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    });
+    el("visible-count").textContent = rows.length + " of " + state.rows.length + " parts shown";
+    const all = el("check-all");
+    if (all) all.checked = rows.length > 0 && rows.every((row) => state.selected.has(row.id));
+  }
+
+  function renderBulkBar() {
+    el("selection-count").textContent = state.selected.size + " selected";
+    el("preview-btn").disabled = state.selected.size === 0 || !el("bulk-field").value;
+    el("apply-btn").disabled = true;
+  }
+
+  function render() {
+    renderHeader(); renderBody(); renderBulkBar();
+  }
+
+  function setPreview(html) { el("preview").innerHTML = html; }
+
+  function esc(text) {
+    const d = document.createElement("div"); d.textContent = text; return d.innerHTML;
+  }
+
+  let lastPreview = null;
+
+  function currentValue() {
+    return el("bulk-choice").hidden ? el("bulk-value").value : el("bulk-choice").value;
+  }
+
+  function setValueControl(field) {
+    const choices = (state.choices || {})[field];
+    const text = el("bulk-value"), select = el("bulk-choice"), list = el("bulk-suggestions");
+    text.value = "";
+    if (choices && field === "location") {
+      select.innerHTML = '<option value="">(clear)</option>' + choices.map((c) => '<option value="' + esc(c) + '">' + esc(c) + "</option>").join("");
+      select.hidden = false; text.hidden = true;
+    } else if (choices && field === "status") {
+      select.innerHTML = choices.map((c) => '<option value="' + esc(c) + '">' + esc(c) + "</option>").join("");
+      select.hidden = false; text.hidden = true;
+    } else {
+      select.hidden = true; text.hidden = false;
+      list.innerHTML = (choices || []).map((c) => '<option value="' + esc(c) + '"></option>').join("");
+    }
+    setPreview(""); lastPreview = null; el("apply-btn").disabled = true;
+  }
+
+  el("preview-btn").addEventListener("click", () => {
+    lastPreview = null; el("apply-btn").disabled = true;
+    const body = { ids: [...state.selected], field: el("bulk-field").value, value: currentValue() };
+    post(el("preview-btn").dataset.url, body).then(({ ok, data }) => {
+      if (!ok) { setPreview('<p class="error-text">' + esc(data.error) + "</p>"); return; }
+      const errors = Object.entries(data.errors || {});
+      let html = "";
+      if (errors.length) {
+        html += '<p class="error-text">' + errors.length + " part(s) would not validate. Nothing can be applied until they are fixed or deselected.</p>";
+        html += '<ul>' + errors.map(([pn, msg]) => "<li><code>" + esc(pn) + "</code>: " + esc(msg) + "</li>").join("") + "</ul>";
+      }
+      if (data.rows.length) {
+        html += "<p>" + data.rows.length + " part(s) will change.</p>";
+        html += '<table class="preview-table"><tr><th>Part</th><th>Old</th><th>New</th></tr>' +
+          data.rows.map((r) => "<tr><td><code>" + esc(r.part_number) + "</code></td><td>" + esc(r.old) + "</td><td>" + esc(r.new) + "</td></tr>").join("") +
+          "</table>";
+      }
+      setPreview(html);
+      if (data.rows.length && !errors.length) {
+        lastPreview = { ids: [...state.selected], field: body.field, value: body.value, count: data.rows.length };
+        el("apply-btn").disabled = false;
+      }
+    });
+  });
+
+  el("apply-btn").addEventListener("click", () => {
+    if (!lastPreview) return;
+    if (!confirm("Change " + lastPreview.field + " on " + lastPreview.count + " parts?")) return;
+    el("apply-btn").disabled = true;
+    post(el("apply-btn").dataset.url, { ids: lastPreview.ids, field: lastPreview.field, value: lastPreview.value, expect: lastPreview.count })
+      .then(({ ok, data }) => {
+        if (!ok) { setPreview('<p class="error-text">' + esc(data.error) + "</p>"); return; }
+        setPreview('<p class="batch-note">Changed ' + data.count + " parts. Batch <code>" + esc(data.batch) + "</code>.</p>");
+        lastPreview = null;
+        loadData();
+        loadUndo();
+        loadHistory();
+      });
+  });
+
+  el("select-visible").addEventListener("click", () => { visibleRows().forEach((row) => state.selected.add(row.id)); render(); });
+  el("clear-selection").addEventListener("click", () => { state.selected.clear(); setPreview(""); render(); });
+  el("clear-filters").addEventListener("click", () => { state.filters = {}; render(); });
+  el("bulk-field").addEventListener("change", () => { setValueControl(el("bulk-field").value); renderBulkBar(); });
+  el("bulk-choice").addEventListener("change", () => { lastPreview = null; el("apply-btn").disabled = true; });
+  el("bulk-value").addEventListener("input", () => { lastPreview = null; el("apply-btn").disabled = true; });
+
+  function startEdit(td, row, col) {
+    if (td.querySelector(".cell-editor")) return;
+    const current = row[col] == null ? "" : String(row[col]);
+    const choices = (state.choices || {})[col];
+    let control;
+    if (choices && (col === "status" || col === "location")) {
+      control = document.createElement("select");
+      if (col === "location") control.appendChild(new Option("(clear)", ""));
+      choices.forEach((c) => control.appendChild(new Option(c, c)));
+      control.value = current;
+    } else {
+      control = document.createElement("input");
+      control.type = "text";
+      control.value = current;
+    }
+    control.className = "cell-editor";
+    td.textContent = "";
+    td.appendChild(control);
+    control.focus();
+    if (control.select) control.select();
+
+    let done = false;
+    const finish = (save) => {
+      if (done) return;
+      done = true;
+      if (save && control.value !== current) saveCell(row.id, col, control.value);
+      else renderBody();
+    };
+    control.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); finish(true); }
+      else if (e.key === "Escape") { e.preventDefault(); finish(false); }
+    });
+    control.addEventListener("blur", () => finish(false));
+  }
+
+  function saveCell(id, field, value) {
+    post(el("cell-url").dataset.url, { id: id, field: field, value: value }).then(({ ok, data }) => {
+      if (!ok) { setPreview('<p class="error-text">' + esc(data.error) + "</p>"); renderBody(); return; }
+      setPreview('<p class="batch-note">Saved ' + esc(field) + ". Batch <code>" + esc(data.batch) + "</code>.</p>");
+      loadData();
+      loadUndo();
+      loadHistory();
+    });
+  }
+
+  function loadHistory() {
+    fetch(el("history").dataset.url, { credentials: "same-origin" })
+      .then((r) => r.json())
+      .then((d) => {
+        const box = el("history");
+        if (!d.batches.length) { box.innerHTML = '<span class="muted">No changes yet.</span>'; return; }
+        box.innerHTML = d.batches.map((b, i) => {
+          const when = new Date(b.changed_at).toLocaleString();
+          const what = b.is_undo ? "undo" : b.field;
+          const cls = (i === 0 ? "latest " : "") + (b.undone ? "struck" : "");
+          const header = esc(when) + " · " + esc(b.by) + " · " + esc(what) + " · " + b.count + " part(s)" +
+            (b.undone ? " (undone)" : "");
+          const lines = b.changes.map((c) =>
+            '<div class="change">' + esc(c.part) + " " + esc(c.name) + ': "' + esc(c.old) + '" –> "' + esc(c.new) + '"</div>').join("");
+          const more = b.count > b.changes.length
+            ? '<div class="change">… and ' + (b.count - b.changes.length) + " more</div>" : "";
+          return '<div class="entry ' + cls + '"><div>' + header + "</div>" + lines + more + "</div>";
+        }).join("") || '<span class="muted">No changes yet.</span>';
+      });
+  }
+
+  function loadUndo() {
+    fetch(el("undo-btn").dataset.url, { credentials: "same-origin" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.next) {
+          el("undo-label").textContent = "Nothing to undo";
+          el("undo-btn").disabled = true;
+          return;
+        }
+        const when = new Date(d.next.changed_at).toLocaleTimeString();
+        el("undo-label").textContent = "Last edit: " + d.next.field + " on " + d.next.count + " part(s) at " + when +
+          " (" + d.depth + " undo step" + (d.depth === 1 ? "" : "s") + " available)";
+        el("undo-btn").disabled = false;
+      });
+  }
+
+  el("undo-btn").addEventListener("click", () => {
+    if (!confirm("Undo the last edit?")) return;
+    el("undo-btn").disabled = true;
+    post(el("undo-btn").dataset.url, {}).then(({ ok, data }) => {
+      if (!ok) { setPreview('<p class="error-text">' + esc(data.error) + "</p>"); return; }
+      setPreview('<p class="batch-note">Undid ' + data.count + " change(s). Undo batch <code>" + esc(data.batch) + "</code>.</p>");
+      loadData();
+      loadUndo();
+      loadHistory();
+    });
+  });
+
+  function loadData() {
+    fetch(el("preview-btn").dataset.dataUrl, { credentials: "same-origin" })
+      .then((r) => r.json())
+      .then((data) => {
+        state.columns = data.columns; state.editable = data.editable; state.choices = data.choices;
+        if (!state.order.length) state.order = ["part_number"].concat(data.columns, ["group"]);
+        renderChooser();
+        state.rows = data.rows;
+        const select = el("bulk-field");
+        const current = select.value;
+        select.innerHTML = '<option value="">choose a field</option>' +
+          data.editable.map((f) => '<option value="' + f + '">' + (LABELS[f] || f) + "</option>").join("");
+        if (current) select.value = current;
+        const alive = new Set(state.rows.map((r) => r.id));
+        state.selected = new Set([...state.selected].filter((id) => alive.has(id)));
+        render();
+      });
+  }
+
+  loadData();
+  loadUndo();
+  loadHistory();
+})();
+</script>
+{% endblock %}

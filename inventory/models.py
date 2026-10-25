@@ -409,3 +409,28 @@ class PriceObservation(models.Model):
 
     def __str__(self):
         return f"{self.part.part_number} {self.currency} {self.price} @ {self.observed_at:%Y-%m-%d}"
+
+
+class PartChange(models.Model):
+    """One field of one part, changed by a bulk edit. Append-only.
+
+    `batch` groups every row a single edit made, so the edit can be seen and
+    reversed as a unit. Values are stored as they would be typed in, so an old
+    value can be applied back through the same path.
+    """
+
+    part = models.ForeignKey(Part, on_delete=models.PROTECT, related_name="changes")
+    field = models.CharField(max_length=32)
+    old_value = models.TextField(blank=True)
+    new_value = models.TextField(blank=True)
+    batch = models.UUIDField(db_index=True)
+    reverts = models.UUIDField(
+        null=True, blank=True, db_index=True, help_text="The batch this one undoes."
+    )
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT, related_name="+"
+    )
+    changed_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ("-changed_at", "-id")

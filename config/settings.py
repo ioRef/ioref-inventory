@@ -248,6 +248,11 @@ UNFOLD = {
                         ),
                     },
                     {
+                        "title": "Bulk edit",
+                        "icon": "table_chart",
+                        "link": lambda r: reverse_lazy("admin:inventory_part_grid"),
+                    },
+                    {
                         "title": "Groups",
                         "icon": "category",
                         "link": lambda r: reverse_lazy(

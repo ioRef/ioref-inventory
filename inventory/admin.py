@@ -4,8 +4,8 @@ from urllib.parse import urlparse
 from django import forms
 from django.contrib import admin
 from django.db.models import Count
-from django.shortcuts import redirect
-from django.urls import reverse
+from django.shortcuts import redirect, render
+from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.http import urlencode
 from unfold.admin import ModelAdmin, TabularInline
@@ -13,6 +13,7 @@ from unfold.contrib.filters.admin import RangeDateFilter
 from unfold.decorators import action
 from unfold.widgets import UnfoldAdminSelect2Widget
 
+from . import grid
 from .export import csv_response
 from .models import (
     Category,
@@ -235,6 +236,33 @@ class PartAdmin(ModelAdmin):
         meta = model._meta
         url = reverse(f"admin:{meta.app_label}_{meta.model_name}_add")
         return redirect(f"{url}?part={object_id}&_part={object_id}")
+
+    def get_urls(self):
+        return [
+            path("grid/", self.admin_site.admin_view(self.grid_page), name="inventory_part_grid"),
+            path("grid/data/", self.admin_site.admin_view(grid.data), name="inventory_part_grid_data"),
+            path("grid/preview/", self.admin_site.admin_view(grid.preview), name="inventory_part_grid_preview"),
+            path("grid/apply/", self.admin_site.admin_view(grid.apply_edit), name="inventory_part_grid_apply"),
+            path("grid/undo/", self.admin_site.admin_view(self.grid_undo), name="inventory_part_grid_undo"),
+            path("grid/cell/", self.admin_site.admin_view(grid.cell), name="inventory_part_grid_cell"),
+            path("grid/history/", self.admin_site.admin_view(grid.history), name="inventory_part_grid_history"),
+        ] + super().get_urls()
+
+    def grid_undo(self, request):
+        if request.method == "POST":
+            return grid.undo(request)
+        return grid.undo_status(request)
+
+    def grid_page(self, request):
+        return render(
+            request,
+            "admin/inventory/part/grid.html",
+            {
+                **self.admin_site.each_context(request),
+                "title": "Bulk edit parts",
+                "opts": self.model._meta,
+            },
+        )
 
     def has_delete_permission(self, request, obj=None):
         """A part is never deleted, by anyone.
