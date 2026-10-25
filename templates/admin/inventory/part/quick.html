@@ -1,0 +1,211 @@
+{% extends "admin/base_site.html" %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .quick { max-width: 42rem; }
+  .quick-number { font-size: 2.25rem; font-family: monospace; font-weight: 600; width: 10rem; padding: .5rem .75rem; letter-spacing: .08em; }
+  .quick label.field { display: block; font-weight: 600; font-size: .9rem; margin-bottom: .3rem; }
+  .card { border: 1px solid #c4c4c4; border-radius: 6px; padding: 1rem 1.25rem; background: #fff; margin-top: 1.25rem; }
+  .card h2 { font-size: 1.25rem; margin: 0 0 .25rem; }
+  .card .muted { color: #636466; }
+  .card dl { display: grid; grid-template-columns: 9rem 1fr; gap: .35rem .75rem; margin: .75rem 0 1rem; font-size: .95rem; }
+  .card dt { color: #636466; }
+  .card dd { font-weight: 700; color: #1d1d1d; }
+  .count-row { display: grid; grid-template-columns: 9rem 1fr 9rem; gap: .5rem .75rem; align-items: center; margin-bottom: .75rem; }
+  .count-input { display: flex; align-items: center; gap: .5rem; }
+  .count-row input { font-size: 1.25rem; padding: .4rem .6rem; width: 100%; box-sizing: border-box; border: 1px solid #8a8a8a; border-radius: 4px; background: #fff; color: #1d1d1d; }
+  .count-row input:focus { outline: none; border-color: #0c8138; box-shadow: 0 0 0 3px rgba(20, 176, 77, .15); }
+  .count-row .unit { font-size: 1.1rem; color: #1d1d1d; white-space: nowrap; }
+  .count-row .latest { font-size: .85rem; color: #636466; }
+  .btn { padding: .5rem 1rem; font-size: .95rem; cursor: pointer; }
+  .btn.primary { background: #0c8138; border-color: #0c8138; color: #fff; font-size: 1.05rem; padding: .6rem 1.4rem; }
+  .btn[disabled] { opacity: .45; cursor: not-allowed; }
+  .notice { margin-top: 1rem; padding: .6rem .8rem; border-radius: 4px; }
+  .notice.error { background: #fdecee; color: #b00020; }
+  .notice.ok { background: #eef8f1; color: #1d1d1d; }
+  .last { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; justify-content: space-between; }
+  .last .last-text { font-size: 1.05rem; line-height: 1.5; flex: 1 1 14rem; }
+  #undo-btn { min-height: 2.75rem; min-width: 7rem; padding: .5rem 1.25rem; font-size: 1.05rem; background: #fff; color: #1d1d1d; border: 1px solid #636466; border-radius: 4px; }
+  #undo-btn:hover { background: #f2f2f2; }
+  @media (max-width: 480px) {
+    #undo-btn { width: 100%; }
+  }
+  @media (max-width: 480px) {
+    .count-row { grid-template-columns: 1fr; }
+    .card dl { grid-template-columns: 1fr; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="quick">
+  <label class="field" for="part-number">ioRef part #</label>
+  <input type="text" id="part-number" class="quick-number" inputmode="numeric" maxlength="8" autocomplete="off" autofocus>
+
+  <div id="notice"></div>
+
+  <section class="card" id="part-card" hidden>
+    <h2 id="short-name"></h2>
+    <dl>
+      <dt>Description</dt><dd id="description"></dd>
+      <dt>Location</dt><dd id="location"></dd>
+    </dl>
+
+    <div class="count-row">
+      <label for="inventory-update">Update inventory</label>
+      <div class="count-input">
+        <input type="text" id="inventory-update" inputmode="numeric" placeholder="count">
+        <span class="unit" id="inventory-unit"></span>
+      </div>
+      <div class="latest" id="latest-inventory"></div>
+    </div>
+    <div class="count-row">
+      <label for="backstock-update">Update backstock</label>
+      <div class="count-input">
+        <input type="text" id="backstock-update" inputmode="numeric" placeholder="count">
+        <span class="unit" id="backstock-unit"></span>
+      </div>
+      <div class="latest" id="latest-backstock"></div>
+    </div>
+
+    <button type="button" class="btn primary" id="update-btn" disabled data-url="{% url 'admin:inventory_part_quick_record' %}">Update</button>
+  </section>
+
+  <section class="card" id="last-card" hidden>
+    <div class="last">
+      <div class="last-text" id="last-text"></div>
+      <button type="button" class="btn" id="undo-btn" data-url="{% url 'admin:inventory_part_quick_undo' %}">Undo</button>
+    </div>
+  </section>
+</div>
+
+<input type="hidden" id="lookup-url" value="{% url 'admin:inventory_part_quick_lookup' %}">
+
+<script>
+(function () {
+  const el = (id) => document.getElementById(id);
+  const csrf = () => (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || "";
+  const state = { part: null, last: null };
+
+  function post(url, body) {
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() },
+      body: JSON.stringify(body),
+    }).then((r) => r.json().then((data) => ({ ok: r.ok, data })));
+  }
+
+  function showNotice(text, kind) {
+    el("notice").innerHTML = text ? '<div class="notice ' + kind + '"></div>' : "";
+    if (text) el("notice").firstChild.textContent = text;
+  }
+
+  function fmtDate(iso) {
+    const d = new Date(iso);
+    return (d.getMonth() + 1) + "/" + d.getDate() + "/" + (d.getFullYear() % 100);
+  }
+
+  function fmtTime(iso) {
+    return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+
+  function unitLabel(unit) {
+    return unit && unit !== "each" ? unit : "";
+  }
+
+  function latestText(entry) {
+    return entry ? entry.text + " as of " + fmtDate(entry.observed_at) : "not counted";
+  }
+
+  function hidePart() {
+    el("part-card").hidden = true;
+    state.part = null;
+    el("update-btn").disabled = true;
+  }
+
+  function showPart(d) {
+    state.part = d;
+    el("short-name").textContent = d.part_number + "  " + d.short_name;
+    el("description").textContent = d.description || "—";
+    el("location").textContent = d.location || "—";
+    el("inventory-unit").textContent = unitLabel(d.unit);
+    el("backstock-unit").textContent = unitLabel(d.unit);
+    el("latest-inventory").textContent = "Latest: " + latestText(d.inventory);
+    el("latest-backstock").textContent = "Latest: " + latestText(d.backstock);
+    el("inventory-update").value = "";
+    el("backstock-update").value = "";
+    el("part-card").hidden = false;
+    el("update-btn").disabled = true;
+  }
+
+  function lookup(number) {
+    if (!number) { hidePart(); return; }
+    fetch(el("lookup-url").value + "?part_number=" + encodeURIComponent(number), { credentials: "same-origin" })
+      .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
+      .then(({ ok, data }) => {
+        if (el("part-number").value.trim() !== number) return;
+        if (!ok) { hidePart(); showNotice(data.error, "error"); return; }
+        showNotice("", "");
+        showPart(data);
+      });
+  }
+
+  function renderLast(d) {
+    const parts = d.events.map((e) => e.kind + " " + e.text);
+    el("last-text").textContent = "Recorded " + d.part_number + " " + d.short_name + ": " + parts.join(", ") +
+      " at " + fmtTime(d.events[0].observed_at) + ".";
+    el("last-card").hidden = false;
+  }
+
+  el("part-number").addEventListener("input", () => {
+    const v = el("part-number").value.trim();
+    showNotice("", "");
+    if (v.length === 4) lookup(v); else hidePart();
+  });
+  el("part-number").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); lookup(el("part-number").value.trim()); }
+  });
+
+  function syncUpdate() {
+    el("update-btn").disabled = !state.part ||
+      (el("inventory-update").value.trim() === "" && el("backstock-update").value.trim() === "");
+  }
+  el("inventory-update").addEventListener("input", syncUpdate);
+  el("backstock-update").addEventListener("input", syncUpdate);
+
+  el("update-btn").addEventListener("click", () => {
+    if (!state.part) return;
+    el("update-btn").disabled = true;
+    post(el("update-btn").dataset.url, {
+      part_number: state.part.part_number,
+      inventory: el("inventory-update").value.trim(),
+      backstock: el("backstock-update").value.trim(),
+    }).then(({ ok, data }) => {
+      if (!ok) { showNotice(data.error, "error"); syncUpdate(); return; }
+      state.last = data;
+      renderLast(data);
+      showNotice("", "");
+      el("part-number").value = data.part_number;
+      lookup(data.part_number);
+      el("part-number").focus();
+      el("part-number").select();
+    });
+  });
+
+  el("undo-btn").addEventListener("click", () => {
+    if (!state.last) return;
+    if (!confirm("Undo this count?")) return;
+    post(el("undo-btn").dataset.url, { ids: state.last.events.map((e) => e.id) }).then(({ ok, data }) => {
+      if (!ok) { showNotice(data.error, "error"); return; }
+      state.last = null;
+      el("last-card").hidden = true;
+      showNotice("Undone.", "ok");
+      if (state.part) lookup(state.part.part_number);
+    });
+  });
+
+  el("part-number").focus();
+})();
+</script>
+{% endblock %}

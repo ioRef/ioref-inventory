@@ -152,7 +152,7 @@ class PartQuerySet(models.QuerySet):
 
 def _latest_quantity(kind):
     return Subquery(
-        StockEvent.objects.filter(part=OuterRef("pk"), kind=kind)
+        StockEvent.objects.active().filter(part=OuterRef("pk"), kind=kind)
         .order_by("-observed_at", "-id")
         .values("quantity")[:1]
     )
@@ -270,7 +270,7 @@ class Part(models.Model):
         if annotation in self.__dict__:
             return self.__dict__[annotation]
         event = (
-            self.stock_events.filter(kind=kind).order_by("-observed_at", "-id").first()
+            self.stock_events.active().filter(kind=kind).order_by("-observed_at", "-id").first()
         )
         return event.quantity if event else None
 
@@ -321,17 +321,21 @@ class Part(models.Model):
 
 
 class StockEventQuerySet(models.QuerySet):
+    def active(self):
+        """Counts that stand. A voided count is kept on record but no longer counts."""
+        return self.filter(voided_at__isnull=True)
+
     def latest_per_part(self, kind):
-        """One row per part: its most recent event of `kind`.
+        """One row per part: its most recent active event of `kind`.
 
         Lets list endpoints avoid an N+1 over the property accessors above.
         """
         newest = (
-            StockEvent.objects.filter(part=OuterRef("part"), kind=kind)
+            StockEvent.objects.active().filter(part=OuterRef("part"), kind=kind)
             .order_by("-observed_at", "-id")
             .values("id")[:1]
         )
-        return self.filter(kind=kind, id__in=Subquery(newest))
+        return self.active().filter(kind=kind, id__in=Subquery(newest))
 
 
 class StockEvent(models.Model):
@@ -363,6 +367,16 @@ class StockEvent(models.Model):
         related_name="stock_events",
     )
     note = models.TextField(blank=True)
+    voided_at = models.DateTimeField(
+        null=True, blank=True, help_text="When this count was undone. It no longer counts."
+    )
+    voided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
 
     objects = StockEventQuerySet.as_manager()
 

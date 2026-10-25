@@ -13,7 +13,7 @@ from unfold.contrib.filters.admin import RangeDateFilter
 from unfold.decorators import action
 from unfold.widgets import UnfoldAdminSelect2Widget
 
-from . import grid
+from . import grid, quick
 from .export import csv_response
 from .models import (
     Category,
@@ -246,12 +246,27 @@ class PartAdmin(ModelAdmin):
             path("grid/undo/", self.admin_site.admin_view(self.grid_undo), name="inventory_part_grid_undo"),
             path("grid/cell/", self.admin_site.admin_view(grid.cell), name="inventory_part_grid_cell"),
             path("grid/history/", self.admin_site.admin_view(grid.history), name="inventory_part_grid_history"),
+            path("quick-inventory/", self.admin_site.admin_view(self.quick_page), name="inventory_part_quick"),
+            path("quick-inventory/lookup/", self.admin_site.admin_view(quick.lookup), name="inventory_part_quick_lookup"),
+            path("quick-inventory/record/", self.admin_site.admin_view(quick.record), name="inventory_part_quick_record"),
+            path("quick-inventory/undo/", self.admin_site.admin_view(quick.undo), name="inventory_part_quick_undo"),
         ] + super().get_urls()
 
     def grid_undo(self, request):
         if request.method == "POST":
             return grid.undo(request)
         return grid.undo_status(request)
+
+    def quick_page(self, request):
+        return render(
+            request,
+            "admin/inventory/part/quick.html",
+            {
+                **self.admin_site.each_context(request),
+                "title": "Quick inventory",
+                "opts": self.model._meta,
+            },
+        )
 
     def grid_page(self, request):
         return render(

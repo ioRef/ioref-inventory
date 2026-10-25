@@ -241,6 +241,11 @@ UNFOLD = {
                 "separator": False,
                 "items": [
                     {
+                        "title": "Quick inventory",
+                        "icon": "speed",
+                        "link": lambda r: reverse_lazy("admin:inventory_part_quick"),
+                    },
+                    {
                         "title": "Parts",
                         "icon": "memory",
                         "link": lambda r: reverse_lazy(

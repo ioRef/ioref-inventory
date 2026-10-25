@@ -29,7 +29,7 @@ from .serializers import (
 
 def _latest_quantity_subquery(kind):
     return Subquery(
-        StockEvent.objects.filter(part=OuterRef("pk"), kind=kind)
+        StockEvent.objects.active().filter(part=OuterRef("pk"), kind=kind)
         .order_by("-observed_at", "-id")
         .values("quantity")[:1]
     )
@@ -123,7 +123,7 @@ class PartViewSet(viewsets.ModelViewSet):
         part = self.get_object()
         if request.method == "POST":
             return self._record(request, part, StockEventSerializer)
-        events = part.stock_events.select_related("recorded_by")
+        events = part.stock_events.active().select_related("recorded_by")
         if (kind := request.query_params.get("kind")) is not None:
             events = events.filter(kind=kind)
         page = self.paginate_queryset(events)

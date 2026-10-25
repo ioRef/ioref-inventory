@@ -60,7 +60,7 @@ def dashboard_callback(request, context):
     ]
 
     context["recent_counts"] = (
-        StockEvent.objects.select_related("part", "recorded_by")
+        StockEvent.objects.active().select_related("part", "recorded_by")
         # Counts imported from the old system carry no recorder and are all
         # dated years back, so they would fill this list and say nothing about
         # what anyone is doing now.

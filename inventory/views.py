@@ -26,7 +26,7 @@ from .models import Part, StockEvent
 
 def _latest_quantity(kind):
     return Subquery(
-        StockEvent.objects.filter(part=OuterRef("pk"), kind=kind)
+        StockEvent.objects.active().filter(part=OuterRef("pk"), kind=kind)
         .order_by("-observed_at", "-id")
         .values("quantity")[:1]
     )
@@ -84,7 +84,7 @@ def part_detail(request, part_number):
         "inventory/part_detail.html",
         {
             "part": part,
-            "counts": part.stock_events.select_related("recorded_by")[:20],
+            "counts": part.stock_events.active().select_related("recorded_by")[:20],
             # Querying prices at all is skipped for anonymous visitors rather
             # than fetched and hidden in the template.
             "prices": part.price_observations.all()[:10] if may_see_costs else None,
