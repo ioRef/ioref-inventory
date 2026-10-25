@@ -1,4 +1,5 @@
 {% extends "admin/base_site.html" %}
+{% load static %}
 
 {% block extrastyle %}
 {{ block.super }}
@@ -25,6 +26,10 @@
   .notice.error { background: #fdecee; color: #b00020; }
   .notice.ok { background: #eef8f1; color: #1d1d1d; }
   .last { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; justify-content: space-between; }
+  .number-row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+  .camera-btn { min-width: 3.25rem; min-height: 3.25rem; padding: .5rem; display: inline-flex; align-items: center; justify-content: center; background: #fff; color: #1d1d1d; border: 1px solid #636466; border-radius: 6px; }
+  .scanner video { width: 100%; max-height: 60vh; object-fit: cover; background: #111; border-radius: 4px; display: block; }
+  .scanner .scan-status { margin: .6rem 0; font-size: .95rem; }
   .last .last-text { font-size: 1.05rem; line-height: 1.5; flex: 1 1 14rem; }
   #undo-btn { min-height: 2.75rem; min-width: 7rem; padding: .5rem 1.25rem; font-size: 1.05rem; background: #fff; color: #1d1d1d; border: 1px solid #636466; border-radius: 4px; }
   #undo-btn:hover { background: #f2f2f2; }
@@ -41,7 +46,19 @@
 {% block content %}
 <div class="quick">
   <label class="field" for="part-number">ioRef part #</label>
-  <input type="text" id="part-number" class="quick-number" inputmode="numeric" maxlength="8" autocomplete="off" autofocus>
+  <div class="number-row">
+    <input type="text" id="part-number" class="quick-number" inputmode="numeric" maxlength="8" autocomplete="off" autofocus>
+    <button type="button" class="btn camera-btn" id="camera-btn" aria-label="Scan a QR code" title="Scan a QR code">
+      <svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h3l2-2h6l2 2h3v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+    </button>
+  </div>
+
+  <section class="card scanner" id="scanner" hidden>
+    <video id="scan-video" playsinline muted></video>
+    <canvas id="scan-canvas" hidden></canvas>
+    <div class="scan-status muted" id="scan-status">Point the camera at a QR code.</div>
+    <button type="button" class="btn" id="camera-stop">Stop camera</button>
+  </section>
 
   <div id="notice"></div>
 
@@ -81,12 +98,13 @@
 </div>
 
 <input type="hidden" id="lookup-url" value="{% url 'admin:inventory_part_quick_lookup' %}">
+<script src="{% static 'inventory/jsqr-1.4.0.min.js' %}"></script>
 
 <script>
 (function () {
   const el = (id) => document.getElementById(id);
   const csrf = () => (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || "";
-  const state = { part: null, last: null };
+  const state = { part: null, last: null, camera: false, stream: null, timer: null, busy: false, ignore: null, ignoreUntil: 0, pending: false };
 
   function post(url, body) {
     return fetch(url, {
@@ -184,6 +202,12 @@
     }).then(({ ok, data }) => {
       if (!ok) { showNotice(data.error, "error"); syncUpdate(); return; }
       state.last = data;
+      state.pending = false;
+      if (state.camera) {
+        state.ignore = data.part_number;
+        state.ignoreUntil = Date.now() + 8000;
+        setScanStatus("Saved. Point the camera at the next QR code.");
+      }
       renderLast(data);
       showNotice("", "");
       el("part-number").value = data.part_number;
@@ -204,6 +228,94 @@
       if (state.part) lookup(state.part.part_number);
     });
   });
+
+  // QR scanning. A label's text ends in the part number, so the last run of digits is the part.
+  function partFromCode(text) {
+    const run = (text || "").match(/(\d+)\D*$/);
+    if (!run || run[1].length < 4) return null;
+    return run[1].slice(-4);
+  }
+
+  function setScanStatus(text) { el("scan-status").textContent = text; }
+
+  function decodeFrame(video, canvas) {
+    if (window.BarcodeDetector) {
+      if (!state.detector) state.detector = new BarcodeDetector({ formats: ["qr_code"] });
+      return state.detector.detect(video).then((codes) => (codes[0] ? codes[0].rawValue : null)).catch(() => null);
+    }
+    if (!window.jsQR) return Promise.resolve(null);
+    const width = Math.min(video.videoWidth, 640);
+    if (!width) return Promise.resolve(null);
+    const height = Math.round(video.videoHeight * (width / video.videoWidth));
+    canvas.width = width; canvas.height = height;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(video, 0, 0, width, height);
+    const image = ctx.getImageData(0, 0, width, height);
+    const code = window.jsQR(image.data, width, height);
+    return Promise.resolve(code ? code.data : null);
+  }
+
+  function tick() {
+    if (!state.camera || state.pending || state.busy) return;
+    state.busy = true;
+    const video = el("scan-video");
+    decodeFrame(video, el("scan-canvas")).then((text) => {
+      state.busy = false;
+      if (!state.camera || state.pending) return;
+      const number = partFromCode(text);
+      if (!number) return;
+      if (number === state.ignore && Date.now() < state.ignoreUntil) return;
+      state.ignore = null;
+      state.pending = true;
+      el("part-number").value = number;
+      setScanStatus("Found part " + number + ". Enter counts, then Update to scan the next one.");
+      lookup(number);
+    });
+  }
+
+  function startCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setScanStatus("This browser can't use the camera here. Type the part number instead.");
+      el("scanner").hidden = false;
+      return;
+    }
+    el("scanner").hidden = false;
+    setScanStatus("Starting camera…");
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
+      .then((stream) => {
+        state.stream = stream;
+        state.camera = true;
+        const video = el("scan-video");
+        video.srcObject = stream;
+        return video.play();
+      })
+      .then(() => {
+        if (state.pending) setScanStatus("Found part " + el("part-number").value + ". Enter counts, then Update to scan the next one.");
+        else setScanStatus("Point the camera at a QR code.");
+        state.timer = setInterval(tick, 200);
+      })
+      .catch((err) => {
+        stopCamera();
+        setScanStatus("Camera unavailable (" + (err && err.name ? err.name : "error") + "). Type the part number instead.");
+      });
+  }
+
+  function stopCamera() {
+    state.camera = false;
+    clearInterval(state.timer);
+    state.timer = null;
+    if (state.stream) state.stream.getTracks().forEach((t) => t.stop());
+    state.stream = null;
+    el("scan-video").srcObject = null;
+    el("scanner").hidden = true;
+  }
+
+  el("camera-btn").addEventListener("click", () => {
+    if (state.camera) { stopCamera(); return; }
+    startCamera();
+  });
+  el("camera-stop").addEventListener("click", stopCamera);
+  window.addEventListener("pagehide", stopCamera);
 
   el("part-number").focus();
 })();
