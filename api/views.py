@@ -86,7 +86,15 @@ class PartViewSet(viewsets.ModelViewSet):
         if (tag := params.get("tag")) is not None:
             queryset = queryset.filter(tags__slug=tag)
         if (search := params.get("search")) is not None:
-            queryset = queryset.filter(short_name__icontains=search)
+            queryset = queryset.filter(
+                Q(short_name__icontains=search)
+                | Q(description__icontains=search)
+                | Q(part_number__icontains=search)
+                | Q(label_text__icontains=search)
+                | Q(manufacturer__icontains=search)
+                | Q(manufacturer_part_num__icontains=search)
+                | Q(supplier_part_num__icontains=search)
+            ).distinct()
 
         if (numbers := params.get("part_number__in")) is not None:
             # Bulk lookup for consumers that group several stocked parts under
