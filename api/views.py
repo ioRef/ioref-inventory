@@ -13,10 +13,14 @@ from inventory.models import (
     Part,
     PriceObservation,
     StockEvent,
+    StockReport,
     Tag,
 )
 
+from inventory.reports import notify
+
 from .serializers import (
+    StockReportSerializer,
     CategorySerializer,
     GroupSerializer,
     LocationSerializer,
@@ -128,6 +132,18 @@ class PartViewSet(viewsets.ModelViewSet):
             events = events.filter(kind=kind)
         page = self.paginate_queryset(events)
         return self.get_paginated_response(StockEventSerializer(page, many=True).data)
+
+    @action(detail=True, methods=["get", "post"], url_path="stock-reports")
+    def stock_reports(self, request, part_number=None):
+        part = self.get_object()
+        if request.method == "POST":
+            serializer = StockReportSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            report = serializer.save(part=part)
+            notify(report)
+            return Response(StockReportSerializer(report).data, status=status.HTTP_201_CREATED)
+        reports = part.stock_reports.filter(resolved_at__isnull=True)
+        return Response(StockReportSerializer(reports, many=True).data)
 
     @action(detail=True, methods=["get", "post"], url_path="prices")
     def prices(self, request, part_number=None):

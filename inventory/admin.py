@@ -6,6 +6,7 @@ from django.contrib import admin
 from django.db.models import Count
 from django.shortcuts import redirect, render
 from django.urls import path, reverse
+from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.http import urlencode
 from unfold.admin import ModelAdmin, TabularInline
@@ -22,6 +23,7 @@ from .models import (
     Part,
     PriceObservation,
     StockEvent,
+    StockReport,
     Tag,
 )
 
@@ -438,3 +440,25 @@ class TagAdmin(PartCountColumn, ModelAdmin):
     list_display = ("name", "slug", "part_count")
     search_fields = ("name", "slug")
     prepopulated_fields = {"slug": ("name",)}
+
+
+@admin.register(StockReport)
+class StockReportAdmin(ModelAdmin):
+    list_display = ("part", "kind", "reported_by", "reported_at", "resolved_at")
+    list_filter = ("kind", ("resolved_at", RangeDateFilter))
+    search_fields = ("part__part_number", "part__short_name", "reported_by")
+    readonly_fields = ("part", "kind", "reported_by", "reported_at", "resolved_at", "resolved_by")
+    fields = readonly_fields
+    actions = ["mark_resolved"]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.action(description="Mark selected reports resolved")
+    def mark_resolved(self, request, queryset):
+        queryset.filter(resolved_at__isnull=True).update(
+            resolved_at=timezone.now(), resolved_by=request.user
+        )
