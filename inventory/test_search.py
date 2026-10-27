@@ -26,3 +26,15 @@ class PartSearchTests(TestCase):
     def test_a_part_matching_several_fields_is_listed_once(self):
         Part.objects.filter(part_number="0347").update(description="keyboard keyboard")
         self.assertEqual(self.numbers("keyboard").count("0347"), 1)
+
+    def test_discontinued_parts_are_excluded_on_request(self):
+        Part.objects.filter(part_number="0347").update(status=Part.Status.DISCONTINUED)
+        data = self.client.get(
+            "/api/v1/parts/", {"search": "keyboard", "include_discontinued": "0"}
+        ).json()
+        self.assertEqual([r["part_number"] for r in data["results"]], ["0100"])
+        self.assertEqual(data["count"], 1)
+
+    def test_discontinued_parts_are_included_by_default(self):
+        Part.objects.filter(part_number="0347").update(status=Part.Status.DISCONTINUED)
+        self.assertEqual(self.numbers("keyboard"), ["0100", "0347"])

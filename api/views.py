@@ -75,6 +75,10 @@ class PartViewSet(viewsets.ModelViewSet):
 
         if (status_filter := params.get("status")) is not None:
             queryset = queryset.filter(status=status_filter)
+        # Discontinued parts are included unless a consumer asks otherwise,
+        # so existing callers see the same list they always did.
+        if params.get("include_discontinued") in ("0", "false", "no"):
+            queryset = queryset.exclude(status=Part.Status.DISCONTINUED)
         if (location := params.get("location")) is not None:
             queryset = queryset.filter(location__code=location)
         if (group := params.get("group")) is not None:
