@@ -1,7 +1,7 @@
 # ioref-inventory
 
 Django 5.2 + Django REST Framework. Parts inventory for the IDeATe Physical
-Computing Lab. In production since August 2026 at `https://ioref.org/inventory`.
+Computing Lab. In production since August 2026, at `https://inventory.ioref.org`.
 
 `README.md` covers usage and API surface. `DEPLOYMENT.md` is the production
 runbook. This document covers architectural rationale, implementation
@@ -9,11 +9,11 @@ constraints, and outstanding work.
 
 ## System context
 
-ioref.org is two applications sharing one host:
+ioref.org is two applications on one host, each on its own hostname:
 
-* **ioref-inventory**, this repository, at `/inventory`. Stock.
-* **ioref-web**, a separate repository, at `/`. Guide content, served from flat
-  markdown under `content/`. Django serving files: `INSTALLED_APPS` is
+* **ioref-inventory**, this repository, at `inventory.ioref.org`. Stock.
+* **ioref-web**, a separate repository, at `ioref.org`. Guide content, served
+  from flat markdown under `content/`. Django serving files: `INSTALLED_APPS` is
   `catalog`, `stock` and staticfiles, with no database.
 
 The printed card deck (`ioRef MakerCards 1.26.22.pdf`) is the authoritative list
@@ -45,20 +45,20 @@ CMU-specific values belong in configuration, not in code.
 Production is `ioref-web-01.andrew.cmu.edu`, RHEL 9. `DEPLOYMENT.md` has the
 procedures; what follows is what makes this deployment unusual.
 
-**The app is mounted under a path, not given its own host.** Apache proxies
-`/inventory` to gunicorn on `127.0.0.1:8000` **with the prefix intact**, and the
-container runs with `SCRIPT_NAME=/inventory`. gunicorn strips the prefix itself
-and rejects any request whose path does not start with it, so mapping
-`/inventory/` to `/` at the proxy, which is the reflex, produces a 500 on every
-request. `FORCE_SCRIPT_NAME` and `STATIC_URL` are both derived from the same
-variable in settings, because Django resolves `STATIC_URL` once at startup and a
-relative value freezes without the prefix, leaving `{% static %}` pointing at
-whatever else is mounted at the root of the host.
+**The app owns its hostname, and `SCRIPT_NAME` is unset.** The application still
+supports being mounted under a path, for another organization that deploys it
+that way. Set `SCRIPT_NAME` and the proxy must pass the prefix **intact**:
+gunicorn strips it itself and rejects any request whose path does not start
+with it, so mapping `/prefix/` to `/` at the proxy, which is the reflex,
+produces a 500 on every request. `FORCE_SCRIPT_NAME` and `STATIC_URL` are both
+derived from the same variable in settings, because Django resolves
+`STATIC_URL` once at startup and a relative value freezes without the prefix.
 
-**Session and CSRF cookies are renamed** for the same reason. ioref-web will
-share the hostname, and two Django applications on one host both default to
-`sessionid` and `csrftoken`, which the browser sends together on any request
-under the deeper path with neither able to tell which is its own.
+**Session and CSRF cookies have their own names** for the same deployments.
+Two Django applications under one hostname both default to `sessionid` and
+`csrftoken`, which the browser sends together on any request under the deeper
+path with neither able to tell which is its own. On its own hostname the names
+are merely harmless.
 
 **It runs as a rootless Podman Quadlet under the `deploy` account.** The unit is
 `~deploy/.config/containers/systemd/ioref-inventory-production.container`. From
@@ -82,17 +82,16 @@ environment it was built with, which looks exactly like the edit not working.
 **Five assertion consumer endpoints are registered with CMU: four on the apex
 and one on `inventory.ioref.org`.** The service provider derives its assertion
 consumer URL from the `Host` header, so a login completes only on a registered
-name. The deployment at `https://ioref.org/inventory` uses the apex endpoint and
-needs no change to `shibboleth2.xml`.
+name. This application uses the `inventory.ioref.org` endpoint, and ioref-web's
+stock-report sign-in uses the apex; neither needs a change to `shibboleth2.xml`.
 
 `guides.ioref.org` is not registered. Logins there are refused by the IdP with
 "Web Login Service - Unable to Respond" and nothing is logged locally, which is
-why the vhost redirects that name to the apex rather than serving it. The
-inventory registration does not help it; a third endpoint would.
+why the vhost redirects that name to the apex rather than serving it.
 
 **The Apache vhost is not in this repository.** It is deployment specific and
-lives on the host, as `/etc/httpd/conf.d/02-ioref.org.conf`, where it serves the
-ioref-web at `/` and this application at `/inventory`. What it has to guarantee
+lives on the host, as `/etc/httpd/conf.d/03-ioref-inventory.conf`, loading after
+`01-shib.conf` and ioref-web's `02-ioref-web.conf`. What it has to guarantee
 is recorded in the Apache section of `DEPLOYMENT.md`, because the vhost is the
 only thing standing between the header-trust backend and anyone who can reach
 it, and that is too important to exist only on one host.
@@ -222,8 +221,8 @@ The block must name every header the application reads, so adding a
 the Apache section of `DEPLOYMENT.md`.
 
 **The API must remain outside Shibboleth.** ioref-web is a service and cannot
-complete a browser redirect to an identity provider. `/inventory/admin` uses
-`requireSession 1`; `/inventory/api` uses `AuthType None` with bearer-key
+complete a browser redirect to an identity provider. `/admin` uses
+`requireSession 1`; `/api` uses `AuthType None` with bearer-key
 authentication enforced by DRF. Applying `requireSession 1` to the whole vhost
 breaks ioref-web.
 
@@ -400,14 +399,3 @@ That wants a single field without pointer input. Unfold's keyboard shortcuts
 assist navigation but not data entry. Access control should be enforced in Django
 with `@login_required` in addition to Apache, so it does not depend on deployment
 configuration.
-
-**Moving to `inventory.ioref.org`.**
-`https://inventory.ioref.org/Shibboleth.sso/SAML2/POST` is now registered, so
-this application can move to its own hostname instead of a path on the shared
-one whenever that is wanted. Doing so drops `SCRIPT_NAME`, `FORCE_SCRIPT_NAME`,
-the derived `STATIC_URL` prefix and the renamed cookies, and changes every
-published `/inventory/...` URL, so it is a planned migration rather than a
-configuration change. `DEPLOYMENT.md` covers what moves.
-
-That registration does **not** fix `guides.ioref.org`, which is still
-unregistered and still redirected to the apex.

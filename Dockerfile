@@ -54,6 +54,11 @@ EXPOSE 8000
 # only matters for a bare local `docker run` with DEBUG=True and nothing
 # else configured; Django itself auto-allows that host in that specific
 # case, independent of what this sends.
+# Only observed by a local `docker build`/`docker compose up`. The build
+# workflow pushes a plain OCI image to GHCR, and the OCI Image Spec has no
+# field for this instruction at all, so it never reaches production; the
+# real production Quadlet defines the identical check itself via HealthCmd=
+# (see DEPLOYMENT.md), independent of the image.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import os,urllib.request,sys; p=os.environ.get('SCRIPT_NAME',''); host=os.environ.get('ALLOWED_HOSTS','').split(',')[0].strip() or '127.0.0.1'; req=urllib.request.Request(f'http://127.0.0.1:8000{p}/api/v1/health/', headers={'Host': host}); sys.exit(0 if urllib.request.urlopen(req).status==200 else 1)"
 

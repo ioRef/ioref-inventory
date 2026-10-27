@@ -1,3 +1,14 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/ioref/.github/main/branding/wordmark.svg" alt="ioRef" width="360">
+</p>
+
+<p align="center">
+  ioRef is a set of tools for exploring, connecting, and coding<br>
+  with components used in creative physical computing.
+</p>
+
+---
+
 # ioref-inventory
 
 Parts inventory: stock levels, locations, prices, suppliers, and their history.
