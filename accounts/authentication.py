@@ -64,4 +64,12 @@ class ApiKeyScopePermission(permissions.BasePermission):
         user = request.user
         if not isinstance(user, ApiKeyUser):
             return True
+        # Filing a stock report is the one write a read-only key may make. The
+        # report is an alert, not a change to stock or prices. reported_by is
+        # whatever the caller sends, so any read key can file under any name.
+        if (
+            getattr(view, "action", None) == "stock_reports"
+            and request.method == "POST"
+        ):
+            return True
         return request.method in permissions.SAFE_METHODS or user.can_write

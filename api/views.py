@@ -15,6 +15,7 @@ from inventory.models import (
     StockEvent,
     Tag,
 )
+from inventory.reports import notify
 
 from .serializers import (
     CategorySerializer,
@@ -23,13 +24,15 @@ from .serializers import (
     PartSerializer,
     PriceObservationSerializer,
     StockEventSerializer,
+    StockReportSerializer,
     TagSerializer,
 )
 
 
 def _latest_quantity_subquery(kind):
     return Subquery(
-        StockEvent.objects.active().filter(part=OuterRef("pk"), kind=kind)
+        StockEvent.objects.active()
+        .filter(part=OuterRef("pk"), kind=kind)
         .order_by("-observed_at", "-id")
         .values("quantity")[:1]
     )
@@ -136,6 +139,27 @@ class PartViewSet(viewsets.ModelViewSet):
             events = events.filter(kind=kind)
         page = self.paginate_queryset(events)
         return self.get_paginated_response(StockEventSerializer(page, many=True).data)
+
+    @action(detail=True, methods=["get", "post"], url_path="stock-reports")
+    def stock_reports(self, request, part_number=None):
+        part = self.get_object()
+        if request.method == "POST":
+            serializer = StockReportSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            # One open report of a kind is enough. Repeat clicks get the
+            # existing report back, and the recipient gets one email.
+            existing = part.stock_reports.filter(
+                kind=serializer.validated_data["kind"], resolved_at__isnull=True
+            ).first()
+            if existing:
+                return Response(StockReportSerializer(existing).data)
+            report = serializer.save(part=part)
+            notify(report)
+            return Response(
+                StockReportSerializer(report).data, status=status.HTTP_201_CREATED
+            )
+        reports = part.stock_reports.filter(resolved_at__isnull=True)
+        return Response(StockReportSerializer(reports, many=True).data)
 
     @action(detail=True, methods=["get", "post"], url_path="prices")
     def prices(self, request, part_number=None):

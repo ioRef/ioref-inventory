@@ -7,6 +7,7 @@ from inventory.models import (
     Part,
     PriceObservation,
     StockEvent,
+    StockReport,
     Tag,
 )
 
@@ -143,3 +144,12 @@ class PartSerializer(serializers.ModelSerializer):
             "purchase_link": price.purchase_link,
             "observed_at": price.observed_at,
         }
+
+
+class StockReportSerializer(serializers.ModelSerializer):
+    part_number = serializers.CharField(source="part.part_number", read_only=True)
+
+    class Meta:
+        model = StockReport
+        fields = ("id", "part_number", "kind", "reported_by", "reported_at", "resolved_at")
+        read_only_fields = ("id", "reported_at", "resolved_at")

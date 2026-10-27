@@ -448,3 +448,30 @@ class PartChange(models.Model):
 
     class Meta:
         ordering = ("-changed_at", "-id")
+
+
+class StockReport(models.Model):
+    """A report from someone on the floor that a part is running low or out.
+
+    Filed through the API by the public site, which has verified the reporter
+    with SSO. Reports are kept, and only resolution is ever recorded against one.
+    """
+
+    class Kind(models.TextChoices):
+        LOW = "low", "Running low"
+        OUT = "out", "Out of stock"
+
+    part = models.ForeignKey(Part, on_delete=models.PROTECT, related_name="stock_reports")
+    kind = models.CharField(max_length=8, choices=Kind.choices)
+    reported_by = models.CharField(max_length=254, help_text="The SSO identity that filed the report.")
+    reported_at = models.DateTimeField(default=timezone.now)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+"
+    )
+
+    class Meta:
+        ordering = ("-reported_at", "-id")
+
+    def __str__(self):
+        return f"{self.part.part_number} {self.kind} reported by {self.reported_by}"
