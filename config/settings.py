@@ -30,6 +30,7 @@ env = environ.Env(
     DEFAULT_FROM_EMAIL=(str, "ioref-inventory@localhost"),
     EMAIL_HOST=(str, "localhost"),
     EMAIL_PORT=(int, 25),
+    EMAIL_TIMEOUT=(int, 10),
     EMAIL_BACKEND=(str, "django.core.mail.backends.console.EmailBackend"),
     PUBLIC_BROWSE=(bool, True),
 )
@@ -43,6 +44,10 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
 EMAIL_BACKEND = env("EMAIL_BACKEND")
 EMAIL_HOST = env("EMAIL_HOST")
 EMAIL_PORT = env("EMAIL_PORT")
+# Reports are emailed inside the request that files them, and ioref-web gives
+# up after INVENTORY_API_TIMEOUT. An unbounded wait on a stalled relay ties up
+# a worker and tells the reporter a saved report was lost.
+EMAIL_TIMEOUT = env("EMAIL_TIMEOUT")
 CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")
 
 INSTALLED_APPS = [
@@ -253,7 +258,9 @@ UNFOLD = {
                     {
                         "title": "Stock reports",
                         "icon": "flag",
-                        "link": lambda r: reverse_lazy("admin:inventory_stockreport_changelist"),
+                        "link": lambda r: reverse_lazy(
+                            "admin:inventory_stockreport_changelist"
+                        ),
                     },
                     {
                         "title": "Quick inventory",

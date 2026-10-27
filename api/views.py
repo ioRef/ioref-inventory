@@ -13,27 +13,26 @@ from inventory.models import (
     Part,
     PriceObservation,
     StockEvent,
-    StockReport,
     Tag,
 )
-
 from inventory.reports import notify
 
 from .serializers import (
-    StockReportSerializer,
     CategorySerializer,
     GroupSerializer,
     LocationSerializer,
     PartSerializer,
     PriceObservationSerializer,
     StockEventSerializer,
+    StockReportSerializer,
     TagSerializer,
 )
 
 
 def _latest_quantity_subquery(kind):
     return Subquery(
-        StockEvent.objects.active().filter(part=OuterRef("pk"), kind=kind)
+        StockEvent.objects.active()
+        .filter(part=OuterRef("pk"), kind=kind)
         .order_by("-observed_at", "-id")
         .values("quantity")[:1]
     )
@@ -139,9 +138,18 @@ class PartViewSet(viewsets.ModelViewSet):
         if request.method == "POST":
             serializer = StockReportSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
+            # One open report of a kind is enough. Repeat clicks get the
+            # existing report back, and the recipient gets one email.
+            existing = part.stock_reports.filter(
+                kind=serializer.validated_data["kind"], resolved_at__isnull=True
+            ).first()
+            if existing:
+                return Response(StockReportSerializer(existing).data)
             report = serializer.save(part=part)
             notify(report)
-            return Response(StockReportSerializer(report).data, status=status.HTTP_201_CREATED)
+            return Response(
+                StockReportSerializer(report).data, status=status.HTTP_201_CREATED
+            )
         reports = part.stock_reports.filter(resolved_at__isnull=True)
         return Response(StockReportSerializer(reports, many=True).data)
 
