@@ -7,11 +7,12 @@ from django.db.models import Count
 from django.shortcuts import redirect, render
 from django.urls import path, reverse
 from django.utils import timezone
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
 from django.utils.http import urlencode
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.contrib.filters.admin import (
     AutocompleteSelectFilter,
+    CheckboxFilter,
     ChoicesDropdownFilter,
     FieldTextFilter,
     RangeDateFilter,
@@ -448,6 +449,25 @@ class TagAdmin(PartCountColumn, ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
 
 
+class ShowResolvedFilter(CheckboxFilter):
+    """Resolved reports are hidden until this box is ticked.
+
+    Choosing Resolved in the Status filter shows them too, since that is an
+    explicit request for them.
+    """
+
+    title = "resolved"
+    parameter_name = "show_resolved"
+
+    def lookups(self, request, model_admin):
+        return [("1", "Show resolved")]
+
+    def queryset(self, request, queryset):
+        if self.value() or request.GET.get("status") == StockReport.Status.RESOLVED:
+            return queryset
+        return queryset.exclude(status=StockReport.Status.RESOLVED)
+
+
 @admin.register(StockReport)
 class StockReportAdmin(ModelAdmin):
     list_display = (
@@ -457,22 +477,32 @@ class StockReportAdmin(ModelAdmin):
         "reported_by",
         "reported_at",
         "resolved_at",
-        "resolved_by",
+        "last_updated_by",
+        "history",
         "short_notes",
     )
     # Every column can be sorted (Django's default for model fields) and filtered.
     list_filter = (
+        ShowResolvedFilter,
         ("part", AutocompleteSelectFilter),
         ("kind", ChoicesDropdownFilter),
         ("status", ChoicesDropdownFilter),
         ("reported_by", FieldTextFilter),
         ("reported_at", RangeDateFilter),
         ("resolved_at", RangeDateFilter),
-        ("resolved_by", RelatedDropdownFilter),
+        ("last_updated_by", RelatedDropdownFilter),
         ("notes", FieldTextFilter),
     )
     search_fields = ("part__part_number", "part__short_name", "reported_by", "notes")
-    readonly_fields = ("part", "kind", "reported_by", "reported_at", "resolved_at", "resolved_by")
+    readonly_fields = (
+        "part",
+        "kind",
+        "reported_by",
+        "reported_at",
+        "resolved_at",
+        "last_updated_by",
+        "history",
+    )
     # Status and notes are the only fields anyone with access may change.
     fields = (
         "part",
@@ -480,15 +510,27 @@ class StockReportAdmin(ModelAdmin):
         "reported_by",
         "reported_at",
         "resolved_at",
-        "resolved_by",
+        "last_updated_by",
+        "history",
         "status",
         "notes",
     )
     actions = ["mark_resolved"]
 
+    @admin.display(description="History")
+    def history(self, obj):
+        return format_html_join("", "{}<br>", ((line,) for line in obj.history_lines()))
+
     @admin.display(description="Notes", ordering="notes")
     def short_notes(self, obj):
         return obj.notes if len(obj.notes) <= 60 else f"{obj.notes[:57]}..."
+
+    def save_model(self, request, obj, form, change):
+        if change and form.changed_data:
+            obj.last_updated_by = request.user
+        if change and "status" in form.changed_data:
+            obj.record_status_change(form.initial["status"], request.user)
+        super().save_model(request, obj, form, change)
 
     def has_add_permission(self, request):
         return False
@@ -498,6 +540,8 @@ class StockReportAdmin(ModelAdmin):
 
     @admin.action(description="Mark selected reports resolved")
     def mark_resolved(self, request, queryset):
-        queryset.filter(resolved_at__isnull=True).update(
-            resolved_at=timezone.now(), resolved_by=request.user
-        )
+        for report in queryset.exclude(status=StockReport.Status.RESOLVED):
+            old_status = report.status
+            report.status = StockReport.Status.RESOLVED
+            report.record_status_change(old_status, request.user)
+            report.save()

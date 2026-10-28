@@ -110,5 +110,6 @@ class StockReportTests(TestCase):
         )
         report.refresh_from_db()
         self.assertIsNotNone(report.resolved_at)
-        self.assertEqual(report.resolved_by, admin)
+        self.assertEqual(report.status, "resolved")
+        self.assertEqual(report.last_updated_by, admin)
         self.assertEqual(StockReport.objects.count(), 1)

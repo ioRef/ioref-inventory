@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import F, OuterRef, Subquery, Value
 from django.db.models.functions import Coalesce
-from django.utils import timezone
+from django.utils import dateformat, timezone
 
 
 class Location(models.Model):
@@ -454,7 +454,9 @@ class StockReport(models.Model):
     """A report from someone on the floor that a part is running low or out.
 
     Filed through the API by the public site, which has verified the reporter
-    with SSO. Reports are kept, and only resolution is ever recorded against one.
+    with SSO. Reports are kept. Their status moves forward through
+    StockReportChange rows, and Resolved is one of the statuses rather than a
+    separate state.
     """
 
     class Kind(models.TextChoices):
@@ -464,17 +466,26 @@ class StockReport(models.Model):
     class Status(models.TextChoices):
         ORDER_PLACED = "order_placed", "Order placed"
         ORDER_QUEUED = "order_queued", "Order queued"
+        ORDER_RECEIVED = "order_received", "Order received, not yet processed"
         PART_UNAVAILABLE = "part_unavailable", "Part unavailable"
         NOT_RESTOCKED = "not_restocked", "Part will not be restocked"
         OTHER = "other", "Other (see notes)"
+        RESOLVED = "resolved", "Resolved: part is restocked"
 
     part = models.ForeignKey(Part, on_delete=models.PROTECT, related_name="stock_reports")
     kind = models.CharField(max_length=8, choices=Kind.choices)
     reported_by = models.CharField(max_length=254, help_text="The SSO identity that filed the report.")
     reported_at = models.DateTimeField(default=timezone.now)
+    # Set when the status becomes Resolved, and cleared if it moves away again.
+    # The open-reports API filters on it, so it stays in step with the status.
     resolved_at = models.DateTimeField(null=True, blank=True)
-    resolved_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+"
+    last_updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="Whoever last changed the status or notes.",
     )
     status = models.CharField(
         max_length=32,
@@ -491,3 +502,69 @@ class StockReport(models.Model):
 
     def __str__(self):
         return f"{self.part.part_number} {self.kind} reported by {self.reported_by}"
+
+    def record_status_change(self, old_status, user):
+        """Log a status change made to this instance, which already holds the new one.
+
+        Appends a StockReportChange, keeps resolved_at in step with Resolved, and
+        records the user as last updated. Call it once per change, before saving.
+        """
+        if old_status == self.status:
+            return
+        now = timezone.now()
+        StockReportChange.objects.create(
+            report=self,
+            changed_at=now,
+            changed_by=user,
+            old_status=old_status,
+            new_status=self.status,
+        )
+        if self.status == self.Status.RESOLVED:
+            self.resolved_at = now
+        elif old_status == self.Status.RESOLVED:
+            self.resolved_at = None
+        self.last_updated_by = user
+
+    def history_lines(self):
+        """The report's life as text, oldest first: the original report, then each status change."""
+        labels = dict(self.Status.choices)
+        lines = [
+            f"{_when(self.reported_at)}: Original report by {self.reported_by}: "
+            f"{self.get_kind_display()}"
+        ]
+        for change in self.changes.select_related("changed_by"):
+            who = (
+                (change.changed_by.get_full_name() or change.changed_by.get_username())
+                if change.changed_by
+                else "someone"
+            )
+            new = labels.get(change.new_status, "No status")
+            lines.append(f"{_when(change.changed_at)}: updated to {new} by {who}")
+        return lines
+
+
+def _when(moment):
+    """Local time in the house style, for example 'Oct. 28, 2026, 10:05 a.m.'."""
+    return dateformat.format(timezone.localtime(moment), "N j, Y, P")
+
+
+class StockReportChange(models.Model):
+    """One status change to a stock report. Append-only, like the other history here."""
+
+    report = models.ForeignKey(StockReport, on_delete=models.CASCADE, related_name="changes")
+    changed_at = models.DateTimeField(default=timezone.now)
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    old_status = models.CharField(max_length=32, blank=True)
+    new_status = models.CharField(max_length=32, blank=True)
+
+    class Meta:
+        ordering = ("changed_at", "id")
+
+    def __str__(self):
+        return f"{self.report_id} {self.old_status or '-'} to {self.new_status or '-'}"
