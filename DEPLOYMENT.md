@@ -119,7 +119,7 @@ REMOTE_USER_EMAIL_HEADER=HTTP_MAIL
 REMOTE_USER_NAME_HEADER=HTTP_DISPLAYNAME
 LOGIN_URL=/Shibboleth.sso/Login
 
-STOCK_REPORT_EMAIL=rzachari@andrew.cmu.edu
+STOCK_REPORT_EMAIL=rzachari@andrew.cmu.edu,help@ideate.cmu.edu
 EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
 EMAIL_HOST=relay.andrew.cmu.edu
 EMAIL_PORT=25
@@ -128,7 +128,7 @@ DEFAULT_FROM_EMAIL=stock-report@ioref.org
 ```
 
 `SCRIPT_NAME` is unset because this application owns its hostname. Stock
-reports filed from ioref-web are emailed to `STOCK_REPORT_EMAIL` through CMU's
+reports filed from ioref-web are emailed to each address in `STOCK_REPORT_EMAIL`, comma-separated, through CMU's
 relay, which accepts mail from this host without authentication; ioref.org's
 SPF record names CMU's mail servers so the sender passes.
 

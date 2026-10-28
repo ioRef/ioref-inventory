@@ -461,6 +461,13 @@ class StockReport(models.Model):
         LOW = "low", "Running low"
         OUT = "out", "Out of stock"
 
+    class Status(models.TextChoices):
+        ORDER_PLACED = "order_placed", "Order placed"
+        ORDER_QUEUED = "order_queued", "Order queued"
+        PART_UNAVAILABLE = "part_unavailable", "Part unavailable"
+        NOT_RESTOCKED = "not_restocked", "Part will not be restocked"
+        OTHER = "other", "Other (see notes)"
+
     part = models.ForeignKey(Part, on_delete=models.PROTECT, related_name="stock_reports")
     kind = models.CharField(max_length=8, choices=Kind.choices)
     reported_by = models.CharField(max_length=254, help_text="The SSO identity that filed the report.")
@@ -469,6 +476,15 @@ class StockReport(models.Model):
     resolved_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+"
     )
+    status = models.CharField(
+        max_length=32,
+        choices=Status.choices,
+        blank=True,
+        default="",
+        help_text="Where the lab is with this report. Blank until someone sets it.",
+    )
+    # One shared note. Anyone with access may overwrite it; there is no history.
+    notes = models.TextField(blank=True)
 
     class Meta:
         ordering = ("-reported_at", "-id")

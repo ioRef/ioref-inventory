@@ -6,7 +6,7 @@ from accounts.models import ApiKey
 from inventory.models import Part, StockReport
 
 
-@override_settings(STOCK_REPORT_EMAIL="owner@andrew.cmu.edu")
+@override_settings(STOCK_REPORT_EMAIL=["owner@andrew.cmu.edu"])
 class StockReportTests(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -77,7 +77,7 @@ class StockReportTests(TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(StockReport.objects.count(), 0)
 
-    @override_settings(STOCK_REPORT_EMAIL="")
+    @override_settings(STOCK_REPORT_EMAIL=[])
     def test_report_is_kept_when_no_recipient_is_configured(self):
         self.auth(self.read_token)
         self.client.post(self.url, {"kind": "low", "reported_by": "x"}, format="json")

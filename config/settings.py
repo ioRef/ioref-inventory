@@ -26,7 +26,7 @@ env = environ.Env(
     REMOTE_USER_NAME_HEADER=(str, "HTTP_DISPLAYNAME"),
     REMOTE_USER_SUBJECT_HEADER=(str, "HTTP_PERSISTENT_ID"),
     SECURE_PROXY=(bool, False),
-    STOCK_REPORT_EMAIL=(str, ""),
+    STOCK_REPORT_EMAIL=(list, []),
     DEFAULT_FROM_EMAIL=(str, "ioref-inventory@localhost"),
     EMAIL_HOST=(str, "localhost"),
     EMAIL_PORT=(int, 25),
@@ -39,6 +39,7 @@ environ.Env.read_env(BASE_DIR / ".env")
 SECRET_KEY = env("SECRET_KEY", default="dev-only-insecure-key-do-not-deploy")
 DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
+# Comma-separated. Every recipient gets the same message.
 STOCK_REPORT_EMAIL = env("STOCK_REPORT_EMAIL")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
 EMAIL_BACKEND = env("EMAIL_BACKEND")

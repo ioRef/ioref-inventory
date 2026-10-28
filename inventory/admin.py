@@ -10,7 +10,13 @@ from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.http import urlencode
 from unfold.admin import ModelAdmin, TabularInline
-from unfold.contrib.filters.admin import RangeDateFilter
+from unfold.contrib.filters.admin import (
+    AutocompleteSelectFilter,
+    ChoicesDropdownFilter,
+    FieldTextFilter,
+    RangeDateFilter,
+    RelatedDropdownFilter,
+)
 from unfold.decorators import action
 from unfold.widgets import UnfoldAdminSelect2Widget
 
@@ -444,12 +450,45 @@ class TagAdmin(PartCountColumn, ModelAdmin):
 
 @admin.register(StockReport)
 class StockReportAdmin(ModelAdmin):
-    list_display = ("part", "kind", "reported_by", "reported_at", "resolved_at")
-    list_filter = ("kind", ("resolved_at", RangeDateFilter))
-    search_fields = ("part__part_number", "part__short_name", "reported_by")
+    list_display = (
+        "part",
+        "kind",
+        "status",
+        "reported_by",
+        "reported_at",
+        "resolved_at",
+        "resolved_by",
+        "short_notes",
+    )
+    # Every column can be sorted (Django's default for model fields) and filtered.
+    list_filter = (
+        ("part", AutocompleteSelectFilter),
+        ("kind", ChoicesDropdownFilter),
+        ("status", ChoicesDropdownFilter),
+        ("reported_by", FieldTextFilter),
+        ("reported_at", RangeDateFilter),
+        ("resolved_at", RangeDateFilter),
+        ("resolved_by", RelatedDropdownFilter),
+        ("notes", FieldTextFilter),
+    )
+    search_fields = ("part__part_number", "part__short_name", "reported_by", "notes")
     readonly_fields = ("part", "kind", "reported_by", "reported_at", "resolved_at", "resolved_by")
-    fields = readonly_fields
+    # Status and notes are the only fields anyone with access may change.
+    fields = (
+        "part",
+        "kind",
+        "reported_by",
+        "reported_at",
+        "resolved_at",
+        "resolved_by",
+        "status",
+        "notes",
+    )
     actions = ["mark_resolved"]
+
+    @admin.display(description="Notes", ordering="notes")
+    def short_notes(self, obj):
+        return obj.notes if len(obj.notes) <= 60 else f"{obj.notes[:57]}..."
 
     def has_add_permission(self, request):
         return False
