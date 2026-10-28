@@ -3,6 +3,7 @@ from urllib.parse import urlparse
 
 from django import forms
 from django.contrib import admin
+from django.contrib.admin.views.main import ChangeList
 from django.db.models import Count
 from django.shortcuts import redirect, render
 from django.urls import path, reverse
@@ -12,7 +13,6 @@ from django.utils.http import urlencode
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.contrib.filters.admin import (
     AutocompleteSelectFilter,
-    CheckboxFilter,
     ChoicesDropdownFilter,
     FieldTextFilter,
     RangeDateFilter,
@@ -449,21 +449,22 @@ class TagAdmin(PartCountColumn, ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
 
 
-class ShowResolvedFilter(CheckboxFilter):
-    """Resolved reports are hidden until this box is ticked.
+class ResolvedHidingChangeList(ChangeList):
+    """The stock reports list, without resolved reports unless asked for.
 
-    Choosing Resolved in the Status filter shows them too, since that is an
-    explicit request for them.
+    Applied only to the list. Opening a resolved report from its history or from
+    a link still works, since the change page looks the report up unfiltered.
     """
 
-    title = "resolved"
-    parameter_name = "show_resolved"
+    def get_filters_params(self, params=None):
+        # Not a filter field, so Django would reject it as an unknown lookup.
+        lookup_params = super().get_filters_params(params)
+        lookup_params.pop("show_resolved", None)
+        return lookup_params
 
-    def lookups(self, request, model_admin):
-        return [("1", "Show resolved")]
-
-    def queryset(self, request, queryset):
-        if self.value() or request.GET.get("status") == StockReport.Status.RESOLVED:
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        if request.GET.get("show_resolved") == "1" or request.GET.get("status") == StockReport.Status.RESOLVED:
             return queryset
         return queryset.exclude(status=StockReport.Status.RESOLVED)
 
@@ -483,7 +484,6 @@ class StockReportAdmin(ModelAdmin):
     )
     # Every column can be sorted (Django's default for model fields) and filtered.
     list_filter = (
-        ShowResolvedFilter,
         ("part", AutocompleteSelectFilter),
         ("kind", ChoicesDropdownFilter),
         ("status", ChoicesDropdownFilter),
@@ -516,6 +516,12 @@ class StockReportAdmin(ModelAdmin):
         "notes",
     )
     actions = ["mark_resolved"]
+    # A checkbox above the filters, rather than in them: Unfold's filter panel
+    # builds its query from its own controls and did not pick up a checkbox.
+    list_before_template = "admin/inventory/stockreport/list_before.html"
+
+    def get_changelist(self, request, **kwargs):
+        return ResolvedHidingChangeList
 
     @admin.display(description="History")
     def history(self, obj):

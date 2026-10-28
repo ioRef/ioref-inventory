@@ -140,3 +140,13 @@ class StockReportAdminTests(TestCase):
         self.report.notes = "word " * 40
         self.report.save()
         self.assertContains(self.client.get(self.list_url), "...")
+
+    def test_resolved_report_still_opens_from_its_change_page(self):
+        self.report.status = "resolved"
+        self.report.save()
+        self.assertEqual(self.client.get(self.change_url).status_code, 200)
+
+    def test_list_offers_a_show_resolved_checkbox_above_the_filters(self):
+        response = self.client.get(self.list_url)
+        self.assertContains(response, 'name="show_resolved" value="1"')
+        self.assertContains(response, 'id="show-resolved-form"')

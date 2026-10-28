@@ -1,0 +1,8 @@
+<form method="get" class="mb-4" id="show-resolved-form">
+    {% for key, value in request.GET.items %}{% if key != "show_resolved" and key != "p" %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endif %}{% endfor %}
+    <label class="inline-flex items-center gap-2 font-medium">
+        <input type="checkbox" name="show_resolved" value="1"{% if request.GET.show_resolved == "1" %} checked{% endif %} onchange="this.form.submit()">
+        Show resolved reports
+    </label>
+    <noscript><button type="submit" class="ml-2 underline">Apply</button></noscript>
+</form>
