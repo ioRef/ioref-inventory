@@ -49,6 +49,7 @@ class StockReportAdminTests(TestCase):
             reported_at=datetime(2026, 10, 28, 14, 5, tzinfo=dt_timezone.utc),
         )
         self.list_url = reverse("admin:inventory_stockreport_changelist")
+        self.data_url = reverse("admin:inventory_stockreport_data")
         self.change_url = reverse("admin:inventory_stockreport_change", args=[self.report.pk])
 
     def set_status(self, status, **extra):
@@ -56,42 +57,42 @@ class StockReportAdminTests(TestCase):
         data.update(extra)
         return self.client.post(self.change_url, data)
 
-    def test_list_filters_and_sorts_on_every_column(self):
-        for params in (
-            {"status": "order_placed"},
-            {"status": "resolved"},
-            {"kind": "out"},
-            {"reported_by": "rzachari"},
-            {"notes__icontains": "waiting"},
-            {"last_updated_by": self.user.pk},
-            {"show_resolved": "1"},
-            {"o": "3"},
-        ):
-            with self.subTest(params=params):
-                self.assertEqual(self.client.get(self.list_url, params).status_code, 200)
+    def rows(self):
+        return self.client.get(self.data_url).json()["rows"]
 
-    def test_resolved_reports_are_hidden_until_the_box_is_ticked(self):
-        self.report.status = "resolved"
-        self.report.save()
-        self.assertNotContains(self.client.get(self.list_url), "rzachari@andrew.cmu.edu")
-        response = self.client.get(self.list_url, {"show_resolved": "1"})
-        self.assertContains(response, "rzachari@andrew.cmu.edu")
+    def test_list_is_a_grid_with_its_data_url(self):
+        response = self.client.get(self.list_url)
+        self.assertContains(response, 'id="sheet"')
+        self.assertContains(response, f'"{self.data_url}"')
+        self.assertContains(response, 'id="show-resolved"')
 
-    def test_choosing_resolved_in_status_filter_shows_them(self):
-        self.report.status = "resolved"
-        self.report.save()
-        response = self.client.get(self.list_url, {"status": "resolved"})
-        self.assertContains(response, "rzachari@andrew.cmu.edu")
+    def test_data_lists_every_report_and_marks_resolved_ones(self):
+        self.set_status("resolved")
+        self.report.refresh_from_db()
+        StockReport.objects.create(part=self.part, kind="low", reported_by="y")
+        rows = self.rows()
+        self.assertEqual(len(rows), 2)
+        resolved = [r for r in rows if r["is_resolved"]]
+        self.assertEqual([r["id"] for r in resolved], [self.report.pk])
 
-    def test_history_reads_as_original_report_then_changes(self):
+    def test_data_rows_carry_the_columns_the_grid_shows(self):
+        row = self.rows()[0]
+        self.assertEqual(row["part_number"], "1000")
+        self.assertEqual(row["kind"], "Out of stock")
+        self.assertEqual(row["status"], "No status")
+        self.assertEqual(row["reported_at"], "Oct. 28, 2026, 10:05 a.m.")
+        self.assertTrue(row["reported_at_sort"].startswith("2026-10-28T14:05"))
+        self.assertEqual(row["resolved_at"], "")
+        self.assertEqual(row["notes"], "")
+
+    def test_history_text_reads_as_original_report_then_changes(self):
         self.set_status("order_placed")
-        lines = self.report.history_lines()
+        history = self.rows()[0]["history"].split("\n")
         self.assertEqual(
-            lines[0],
+            history[0],
             "Oct. 28, 2026, 10:05 a.m.: Original report by rzachari@andrew.cmu.edu: Out of stock",
         )
-        self.assertTrue(lines[1].endswith(": updated to Order placed by Robert Zacharias"))
-        self.assertEqual(len(lines), 2)
+        self.assertTrue(history[1].endswith(": updated to Order placed by Robert Zacharias"))
 
     def test_each_status_change_is_appended_to_history(self):
         self.set_status("order_placed")
@@ -99,6 +100,10 @@ class StockReportAdminTests(TestCase):
         self.assertEqual(self.report.changes.count(), 2)
         self.assertEqual(self.report.changes.last().new_status, "order_received")
         self.assertEqual(len(self.report.history_lines()), 3)
+
+    def test_status_gains_order_received_and_resolved(self):
+        self.assertIn("order_received", [c for c, _ in StockReport.Status.choices])
+        self.assertIn("resolved", [c for c, _ in StockReport.Status.choices])
 
     def test_resolving_sets_resolved_at_and_last_updated_by(self):
         self.set_status("resolved")
@@ -120,7 +125,7 @@ class StockReportAdminTests(TestCase):
         self.assertEqual(self.report.last_updated_by, self.user)
         self.assertEqual(StockReportChange.objects.filter(report=self.report).count(), 0)
 
-    def test_mark_resolved_action_resolves_and_records_history(self):
+    def test_bulk_resolve_from_the_grid_resolves_and_records_history(self):
         self.client.post(
             self.list_url,
             {"action": "mark_resolved", "_selected_action": [self.report.pk]},
@@ -136,17 +141,11 @@ class StockReportAdminTests(TestCase):
         self.assertContains(response, 'name="notes"')
         self.assertNotContains(response, 'name="reported_by"')
 
-    def test_long_notes_are_truncated_in_the_list(self):
-        self.report.notes = "word " * 40
-        self.report.save()
-        self.assertContains(self.client.get(self.list_url), "...")
-
     def test_resolved_report_still_opens_from_its_change_page(self):
-        self.report.status = "resolved"
-        self.report.save()
+        self.set_status("resolved")
         self.assertEqual(self.client.get(self.change_url).status_code, 200)
 
-    def test_list_offers_a_show_resolved_checkbox_above_the_filters(self):
-        response = self.client.get(self.list_url)
-        self.assertContains(response, 'name="show_resolved" value="1"')
-        self.assertContains(response, 'id="show-resolved-form"')
+    def test_grid_is_only_for_people_who_can_see_reports(self):
+        self.client.logout()
+        response = self.client.get(self.data_url)
+        self.assertNotEqual(response.status_code, 200)

@@ -1,0 +1,263 @@
+{% extends "admin/base_site.html" %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .sheet-top { margin: .5rem 0 .75rem; }
+  .sheet-status { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.25rem; margin-bottom: .6rem; }
+  .status-strong { font-weight: 700; font-size: 1rem; }
+  .sheet-actions { display: flex; gap: .4rem; flex-wrap: wrap; }
+  .btn { padding: .4rem .8rem; font-size: .9rem; cursor: pointer; }
+  .btn.primary { background: #0c8138; border-color: #0c8138; color: #fff; }
+  .btn[disabled] { opacity: .45; cursor: not-allowed; }
+  .fold { margin: .4rem 0; }
+  .fold summary { cursor: pointer; font-weight: 600; font-size: .9rem; padding: .25rem 0; }
+  .column-bar { display: flex; flex-wrap: wrap; gap: .4rem .9rem; padding: .4rem 0; font-size: .9rem; }
+  .column-choice, .show-resolved { display: inline-flex; align-items: center; gap: .3rem; }
+  .muted { color: #636466; }
+  .grid-wrap { overflow: auto; max-height: 70vh; border: 1px solid #c4c4c4; border-radius: 4px; }
+  table.bulk-sheet { table-layout: fixed; width: max-content; min-width: 100%; border-collapse: collapse; font-size: .9rem; background: #fdfdfd; }
+  table.bulk-sheet th, table.bulk-sheet td { padding: .35rem .5rem; border-bottom: 1px solid #f2f2f2; border-right: 1px solid #f2f2f2; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  table.bulk-sheet thead th { position: sticky; top: 0; background: #f2f2f2; z-index: 1; cursor: pointer; user-select: none; }
+  table.bulk-sheet thead tr.filters th { top: 2.3rem; background: #fdfdfd; cursor: default; }
+  table.bulk-sheet thead input { width: 100%; box-sizing: border-box; font-size: .85rem; padding: .2rem .3rem; }
+  table.bulk-sheet tr.selected td { background: #eef8f1; }
+  table.bulk-sheet td.multiline { white-space: pre-line; overflow-wrap: anywhere; overflow: visible; text-overflow: clip; vertical-align: top; }
+  table.bulk-sheet .sticky-check { position: sticky; left: 0; background: #fdfdfd; z-index: 2; width: 36px; }
+  table.bulk-sheet thead th.sticky-check { background: #f2f2f2; z-index: 4; }
+  table.bulk-sheet thead tr.filters th.sticky-check { background: #fdfdfd; z-index: 4; }
+  table.bulk-sheet tr.selected td.sticky-check { background: #eef8f1; }
+  .part-number { font-family: monospace; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sheet-top">
+  <div class="sheet-status">
+    <span class="status-strong" id="selection-count">0 selected</span>
+    <span class="muted" id="visible-count"></span>
+    <label class="show-resolved"><input type="checkbox" id="show-resolved"> Show resolved reports</label>
+    <span class="sheet-actions">
+      <button type="button" class="btn" id="select-visible">Select all shown</button>
+      <button type="button" class="btn" id="clear-selection">Clear selection</button>
+      <button type="button" class="btn" id="clear-filters">Clear filters</button>
+      <button type="button" class="btn primary" id="resolve-btn" disabled>Mark selected resolved</button>
+    </span>
+  </div>
+
+  <details class="fold">
+    <summary>Show columns</summary>
+    <div class="column-bar" id="column-bar"></div>
+  </details>
+</div>
+
+<form id="resolve-form" method="post" action="{{ action_url }}" hidden>
+  {% csrf_token %}
+  <input type="hidden" name="action" value="mark_resolved">
+</form>
+
+<div class="grid-wrap">
+  <table class="bulk-sheet" id="sheet">
+    <thead>
+      <tr id="header-row"></tr>
+      <tr class="filters" id="filter-row"></tr>
+    </thead>
+    <tbody id="body"></tbody>
+  </table>
+</div>
+
+<script>
+(function () {
+  // Every column can be shown or hidden, filtered by typing, and sorted by
+  // clicking its header. `sort` names the value to sort on when the displayed
+  // text (a date, say) does not sort on its own.
+  const COLUMNS = [
+    { key: "part_number", label: "Part", shown: true },
+    { key: "part_name", label: "Part name", shown: true },
+    { key: "kind", label: "Kind", shown: true },
+    { key: "status", label: "Status", shown: true },
+    { key: "reported_by", label: "Reported by", shown: true },
+    { key: "reported_at", label: "Reported at", sort: "reported_at_sort", shown: true },
+    { key: "resolved_at", label: "Resolved at", sort: "resolved_at_sort", shown: true },
+    { key: "last_updated_by", label: "Last updated by", shown: true },
+    { key: "history", label: "History", shown: false },
+    { key: "notes", label: "Notes", shown: true },
+  ];
+  const state = {
+    rows: [],
+    selected: new Set(),
+    filters: {},
+    hidden: new Set(COLUMNS.filter((c) => !c.shown).map((c) => c.key)),
+    sortKey: "reported_at",
+    sortDir: -1,
+    showResolved: false,
+  };
+  const el = (id) => document.getElementById(id);
+  const visibleCols = () => COLUMNS.filter((c) => !state.hidden.has(c.key));
+
+  function filteredRows() {
+    const keys = Object.keys(state.filters).filter((k) => state.filters[k]);
+    return state.rows
+      .filter((row) => state.showResolved || !row.is_resolved)
+      .filter((row) => keys.every((k) => String(row[k]).toLowerCase().includes(state.filters[k].toLowerCase())))
+      .sort((a, b) => {
+        const col = COLUMNS.find((c) => c.key === state.sortKey);
+        const field = col.sort || col.key;
+        const x = String(a[field]).toLowerCase(), y = String(b[field]).toLowerCase();
+        return (x < y ? -1 : x > y ? 1 : 0) * state.sortDir;
+      });
+  }
+
+  function renderColumns() {
+    const bar = el("column-bar");
+    bar.innerHTML = '<span class="muted">Show columns:</span>';
+    COLUMNS.forEach((col) => {
+      const label = document.createElement("label");
+      label.className = "column-choice";
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = !state.hidden.has(col.key);
+      box.addEventListener("change", () => {
+        if (box.checked) state.hidden.delete(col.key); else state.hidden.add(col.key);
+        delete state.filters[col.key];
+        render();
+      });
+      label.append(box, " " + col.label);
+      bar.appendChild(label);
+    });
+  }
+
+  function renderHeader() {
+    const head = el("header-row"), filters = el("filter-row");
+    head.innerHTML = ""; filters.innerHTML = "";
+    const check = document.createElement("th");
+    check.className = "sticky-check";
+    check.innerHTML = '<input type="checkbox" id="check-all" aria-label="Select all shown">';
+    check.querySelector("input").addEventListener("change", (e) => {
+      filteredRows().forEach((row) => (e.target.checked ? state.selected.add(row.id) : state.selected.delete(row.id)));
+      renderBody();
+    });
+    head.appendChild(check);
+    filters.appendChild(document.createElement("th")).className = "sticky-check";
+    visibleCols().forEach((col) => {
+      const th = document.createElement("th");
+      const arrow = state.sortKey === col.key ? (state.sortDir > 0 ? " ▲" : " ▼") : "";
+      th.textContent = col.label + arrow;
+      th.title = "Sort";
+      th.addEventListener("click", () => {
+        state.sortDir = state.sortKey === col.key ? -state.sortDir : 1;
+        state.sortKey = col.key;
+        render();
+      });
+      head.appendChild(th);
+
+      const fth = document.createElement("th");
+      const input = document.createElement("input");
+      input.placeholder = "filter";
+      input.setAttribute("aria-label", "Filter " + col.label);
+      input.value = state.filters[col.key] || "";
+      input.addEventListener("input", () => {
+        state.filters[col.key] = input.value;
+        renderBody();
+      });
+      fth.appendChild(input);
+      filters.appendChild(fth);
+    });
+  }
+
+  function renderBody() {
+    const body = el("body");
+    body.innerHTML = "";
+    const rows = filteredRows();
+    // Selection only covers rows you can see, so resolving never touches a hidden one.
+    const shown = new Set(rows.map((r) => r.id));
+    state.selected = new Set([...state.selected].filter((id) => shown.has(id)));
+    rows.forEach((row) => {
+      const tr = document.createElement("tr");
+      if (state.selected.has(row.id)) tr.classList.add("selected");
+      const check = document.createElement("td");
+      check.className = "sticky-check";
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = state.selected.has(row.id);
+      box.addEventListener("change", () => {
+        if (box.checked) state.selected.add(row.id); else state.selected.delete(row.id);
+        updateSelection();
+      });
+      check.appendChild(box);
+      tr.appendChild(check);
+      visibleCols().forEach((col) => {
+        const td = document.createElement("td");
+        if (col.key === "part_number") {
+          const link = document.createElement("a");
+          link.href = row.change_url;
+          link.textContent = row.part_number;
+          link.className = "part-number";
+          td.appendChild(link);
+        } else {
+          td.textContent = row[col.key];
+        }
+        if (col.key === "history" || col.key === "notes") td.className = "multiline";
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    });
+    el("visible-count").textContent = rows.length + " of " + state.rows.length + " reports shown";
+    const all = el("check-all");
+    if (all) all.checked = rows.length > 0 && rows.every((row) => state.selected.has(row.id));
+    updateSelection();
+  }
+
+  function updateSelection() {
+    el("selection-count").textContent = state.selected.size + " selected";
+    el("resolve-btn").disabled = state.selected.size === 0;
+    document.querySelectorAll("#body tr").forEach((tr) => {
+      const box = tr.querySelector("input[type=checkbox]");
+      if (box) tr.classList.toggle("selected", box.checked);
+    });
+  }
+
+  function render() {
+    renderColumns();
+    renderHeader();
+    renderBody();
+  }
+
+  el("show-resolved").addEventListener("change", (e) => {
+    state.showResolved = e.target.checked;
+    renderBody();
+  });
+  el("select-visible").addEventListener("click", () => {
+    filteredRows().forEach((row) => state.selected.add(row.id));
+    renderBody();
+  });
+  el("clear-selection").addEventListener("click", () => {
+    state.selected.clear();
+    renderBody();
+  });
+  el("clear-filters").addEventListener("click", () => {
+    state.filters = {};
+    render();
+  });
+  el("resolve-btn").addEventListener("click", () => {
+    const form = el("resolve-form");
+    form.querySelectorAll("input[name=_selected_action]").forEach((input) => input.remove());
+    state.selected.forEach((id) => {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = "_selected_action";
+      input.value = id;
+      form.appendChild(input);
+    });
+    form.submit();
+  });
+
+  fetch("{{ data_url }}", { credentials: "same-origin" })
+    .then((r) => r.json())
+    .then((data) => {
+      state.rows = data.rows;
+      render();
+    });
+})();
+</script>
+{% endblock %}

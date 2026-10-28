@@ -529,23 +529,26 @@ class StockReport(models.Model):
         """The report's life as text, oldest first: the original report, then each status change."""
         labels = dict(self.Status.choices)
         lines = [
-            f"{_when(self.reported_at)}: Original report by {self.reported_by}: "
+            f"{local_time_text(self.reported_at)}: Original report by {self.reported_by}: "
             f"{self.get_kind_display()}"
         ]
         for change in self.changes.select_related("changed_by"):
-            who = (
-                (change.changed_by.get_full_name() or change.changed_by.get_username())
-                if change.changed_by
-                else "someone"
-            )
+            who = person_name(change.changed_by) or "someone"
             new = labels.get(change.new_status, "No status")
-            lines.append(f"{_when(change.changed_at)}: updated to {new} by {who}")
+            lines.append(f"{local_time_text(change.changed_at)}: updated to {new} by {who}")
         return lines
 
 
-def _when(moment):
+def local_time_text(moment):
     """Local time in the house style, for example 'Oct. 28, 2026, 10:05 a.m.'."""
     return dateformat.format(timezone.localtime(moment), "N j, Y, P")
+
+
+def person_name(user):
+    """A person's full name, falling back to their username. Empty when there is no user."""
+    if user is None:
+        return ""
+    return user.get_full_name() or user.get_username()
 
 
 class StockReportChange(models.Model):

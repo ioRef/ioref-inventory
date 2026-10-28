@@ -3,21 +3,16 @@ from urllib.parse import urlparse
 
 from django import forms
 from django.contrib import admin
-from django.contrib.admin.views.main import ChangeList
+from django.core.exceptions import PermissionDenied
 from django.db.models import Count
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from django.utils.http import urlencode
 from unfold.admin import ModelAdmin, TabularInline
-from unfold.contrib.filters.admin import (
-    AutocompleteSelectFilter,
-    ChoicesDropdownFilter,
-    FieldTextFilter,
-    RangeDateFilter,
-    RelatedDropdownFilter,
-)
+from unfold.contrib.filters.admin import RangeDateFilter
 from unfold.decorators import action
 from unfold.widgets import UnfoldAdminSelect2Widget
 
@@ -32,6 +27,8 @@ from .models import (
     StockEvent,
     StockReport,
     Tag,
+    local_time_text,
+    person_name,
 )
 
 logger = logging.getLogger(__name__)
@@ -449,26 +446,6 @@ class TagAdmin(PartCountColumn, ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
 
 
-class ResolvedHidingChangeList(ChangeList):
-    """The stock reports list, without resolved reports unless asked for.
-
-    Applied only to the list. Opening a resolved report from its history or from
-    a link still works, since the change page looks the report up unfiltered.
-    """
-
-    def get_filters_params(self, params=None):
-        # Not a filter field, so Django would reject it as an unknown lookup.
-        lookup_params = super().get_filters_params(params)
-        lookup_params.pop("show_resolved", None)
-        return lookup_params
-
-    def get_queryset(self, request):
-        queryset = super().get_queryset(request)
-        if request.GET.get("show_resolved") == "1" or request.GET.get("status") == StockReport.Status.RESOLVED:
-            return queryset
-        return queryset.exclude(status=StockReport.Status.RESOLVED)
-
-
 @admin.register(StockReport)
 class StockReportAdmin(ModelAdmin):
     list_display = (
@@ -481,17 +458,6 @@ class StockReportAdmin(ModelAdmin):
         "last_updated_by",
         "history",
         "short_notes",
-    )
-    # Every column can be sorted (Django's default for model fields) and filtered.
-    list_filter = (
-        ("part", AutocompleteSelectFilter),
-        ("kind", ChoicesDropdownFilter),
-        ("status", ChoicesDropdownFilter),
-        ("reported_by", FieldTextFilter),
-        ("reported_at", RangeDateFilter),
-        ("resolved_at", RangeDateFilter),
-        ("last_updated_by", RelatedDropdownFilter),
-        ("notes", FieldTextFilter),
     )
     search_fields = ("part__part_number", "part__short_name", "reported_by", "notes")
     readonly_fields = (
@@ -516,12 +482,57 @@ class StockReportAdmin(ModelAdmin):
         "notes",
     )
     actions = ["mark_resolved"]
-    # A checkbox above the filters, rather than in them: Unfold's filter panel
-    # builds its query from its own controls and did not pick up a checkbox.
-    list_before_template = "admin/inventory/stockreport/list_before.html"
+    def get_urls(self):
+        return [
+            path("data/", self.admin_site.admin_view(self.data_view), name="inventory_stockreport_data"),
+            *super().get_urls(),
+        ]
 
-    def get_changelist(self, request, **kwargs):
-        return ResolvedHidingChangeList
+    def changelist_view(self, request, extra_context=None):
+        # The list is a sortable, filterable grid, like the bulk editor. Its
+        # actions still post here, and those go to the standard changelist.
+        if request.method == "POST":
+            return super().changelist_view(request, extra_context)
+        if not self.has_view_or_change_permission(request):
+            raise PermissionDenied
+        return render(
+            request,
+            "admin/inventory/stockreport/change_list.html",
+            {
+                **self.admin_site.each_context(request),
+                "title": "Stock reports",
+                "opts": self.model._meta,
+                "data_url": reverse("admin:inventory_stockreport_data"),
+                "action_url": request.path,
+            },
+        )
+
+    def data_view(self, request):
+        if not self.has_view_or_change_permission(request):
+            raise PermissionDenied
+        labels = dict(StockReport.Status.choices)
+        reports = StockReport.objects.select_related("part", "last_updated_by").order_by("-reported_at", "-id")
+        rows = [
+            {
+                "id": report.pk,
+                "change_url": reverse("admin:inventory_stockreport_change", args=[report.pk]),
+                "part_number": report.part.part_number,
+                "part_name": report.part.short_name,
+                "kind": report.get_kind_display(),
+                "status": labels.get(report.status, "No status"),
+                "reported_by": report.reported_by,
+                "reported_at": local_time_text(report.reported_at),
+                "reported_at_sort": report.reported_at.isoformat(),
+                "resolved_at": local_time_text(report.resolved_at) if report.resolved_at else "",
+                "resolved_at_sort": report.resolved_at.isoformat() if report.resolved_at else "",
+                "last_updated_by": person_name(report.last_updated_by),
+                "history": "\n".join(report.history_lines()),
+                "notes": report.notes,
+                "is_resolved": report.status == StockReport.Status.RESOLVED,
+            }
+            for report in reports
+        ]
+        return JsonResponse({"rows": rows})
 
     @admin.display(description="History")
     def history(self, obj):
