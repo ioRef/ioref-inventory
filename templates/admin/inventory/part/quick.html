@@ -167,18 +167,31 @@
     el("update-btn").disabled = true;
   }
 
-  // Resolves true when the part was found and shown, false otherwise.
+  function lookupFailed(message) {
+    hidePart();
+    showNotice(message, "error");
+    return { ok: false, error: message };
+  }
+
+  // Resolves to { ok, error }. ok is true when the part was shown. error is the reason, or "" when a newer lookup has replaced this one.
   function lookup(number) {
-    if (!number) { hidePart(); return Promise.resolve(false); }
+    if (!number) { hidePart(); return Promise.resolve({ ok: false, error: "" }); }
     return fetch(el("lookup-url").value + "?part_number=" + encodeURIComponent(number), { credentials: "same-origin" })
-      .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
+      .catch(() => { throw new Error("Couldn't reach the inventory server. Check the connection and try again."); })
+      .then((r) => {
+        if (!(r.headers.get("content-type") || "").includes("application/json")) {
+          throw new Error("Got HTTP " + r.status + " instead of part data. Your sign-in may have expired; reload the page to sign in again.");
+        }
+        return r.json().then((data) => ({ ok: r.ok, data }));
+      })
       .then(({ ok, data }) => {
-        if (el("part-number").value.trim() !== number) return false;
-        if (!ok) { hidePart(); showNotice(data.error, "error"); return false; }
+        if (el("part-number").value.trim() !== number) return { ok: false, error: "" };
+        if (!ok) return lookupFailed(data.error);
         showNotice("", "");
         showPart(data);
-        return true;
-      });
+        return { ok: true, error: "" };
+      })
+      .catch((err) => lookupFailed(err.message));
   }
 
   function renderLast(d) {
@@ -259,9 +272,9 @@
     setScanStatus(text);
   }
 
-  // The preview shows the center ninth of the frame: a square whose side is a third of the shorter side.
+  // The preview shows the center of the frame: a square whose side is half the shorter side.
   function cropOf(video) {
-    const crop = Math.min(video.videoWidth, video.videoHeight) / 3;
+    const crop = Math.min(video.videoWidth, video.videoHeight) / 2;
     return { crop: crop, sx: (video.videoWidth - crop) / 2, sy: (video.videoHeight - crop) / 2 };
   }
 
@@ -353,11 +366,11 @@
       state.pending = true;
       el("part-number").value = number;
       setScanStatus("Found part " + number + "…");
-      lookup(number).catch(() => false).then((found) => {
+      lookup(number).then((result) => {
         if (!state.camera) return;
-        if (!found) {
+        if (!result.ok) {
           state.pending = false;
-          setScanStatus("That code is not a known part. Keep scanning.");
+          if (result.error) setScanStatus(result.error + " Keep scanning.");
           return;
         }
         el("scanner").hidden = true;
