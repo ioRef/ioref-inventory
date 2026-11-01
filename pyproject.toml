@@ -3,10 +3,10 @@ name = "ioref-inventory"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
-    "django>=5.2,<6",
+    "django>=5.2.18,<6",
     "django-environ>=0.14.0",
     "django-unfold>=0.110.0",
-    "djangorestframework>=3.18.1",
+    "djangorestframework>=3.18.3",
     "gunicorn>=26.2.0",
     "psycopg2-binary>=2.9.13",
     "whitenoise>=6.12.0",
