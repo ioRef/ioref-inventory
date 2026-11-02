@@ -18,7 +18,7 @@
   .count-input { display: flex; align-items: center; gap: .5rem; }
   .count-row input { font-size: 1.25rem; padding: .4rem .6rem; width: 100%; box-sizing: border-box; border: 1px solid #8a8a8a; border-radius: 4px; background: #fff; color: #1d1d1d; }
   .count-row input:focus { outline: none; border-color: #0c8138; box-shadow: 0 0 0 3px rgba(20, 176, 77, .15); }
-  .count-row .unit { font-size: 1.1rem; color: #1d1d1d; white-space: nowrap; }
+  .count-row .unit { font-size: 1.1rem; font-weight: 700; color: #1d1d1d; white-space: nowrap; }
   .count-row .latest { font-size: .85rem; color: #636466; }
   .btn { padding: .5rem 1rem; font-size: .95rem; cursor: pointer; }
   .btn.primary { background: #0c8138; border-color: #0c8138; color: #fff; font-size: 1.05rem; padding: .6rem 1.4rem; }
@@ -116,12 +116,21 @@
   const VIEW = 480;
   const state = { part: null, last: null, camera: false, stream: null, frame: null, busy: false, pending: false, lastDecode: 0, ignore: null, ignoreUntil: 0, audio: null, detector: null };
 
+  // Rejects with a readable message when the request fails or the reply isn't JSON. A failed request may still have been saved.
   function post(url, body) {
     return fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() },
       body: JSON.stringify(body),
-    }).then((r) => r.json().then((data) => ({ ok: r.ok, data })));
+    }).then(
+      (r) => {
+        if (!(r.headers.get("content-type") || "").includes("application/json")) {
+          throw new Error("Got HTTP " + r.status + " instead of a reply from the server. Your sign-in may have expired; reload the page and check before retrying.");
+        }
+        return r.json().then((data) => ({ ok: r.ok, data }));
+      },
+      () => { throw new Error("Couldn't reach the inventory server. The count may or may not have been saved; check before retrying."); }
+    );
   }
 
   function showNotice(text, kind) {
@@ -153,6 +162,8 @@
   }
 
   function showPart(d) {
+    // A refresh of the same part must not wipe counts typed while it was in flight.
+    const same = state.part !== null && state.part.part_number === d.part_number;
     state.part = d;
     el("short-name").textContent = d.part_number + "  " + d.short_name;
     el("description").textContent = d.description || "—";
@@ -161,10 +172,12 @@
     el("backstock-unit").textContent = unitLabel(d.unit);
     el("latest-inventory").textContent = "Latest: " + latestText(d.inventory);
     el("latest-backstock").textContent = "Latest: " + latestText(d.backstock);
-    el("inventory-update").value = "";
-    el("backstock-update").value = "";
+    if (!same) {
+      el("inventory-update").value = "";
+      el("backstock-update").value = "";
+    }
     el("part-card").hidden = false;
-    el("update-btn").disabled = true;
+    syncUpdate();
   }
 
   function lookupFailed(message) {
@@ -216,6 +229,12 @@
   }
   el("inventory-update").addEventListener("input", syncUpdate);
   el("backstock-update").addEventListener("input", syncUpdate);
+  // Enter in a count field presses Update. A disabled button ignores the click, so an empty form does nothing.
+  function onCountEnter(e) {
+    if (e.key === "Enter") { e.preventDefault(); el("update-btn").click(); }
+  }
+  el("inventory-update").addEventListener("keydown", onCountEnter);
+  el("backstock-update").addEventListener("keydown", onCountEnter);
 
   el("update-btn").addEventListener("click", () => {
     if (!state.part) return;
@@ -229,6 +248,8 @@
       state.last = data;
       renderLast(data);
       showNotice("", "");
+      el("inventory-update").value = "";
+      el("backstock-update").value = "";
       if (state.camera) {
         // Back to ready: the camera is still running, so show the preview again.
         state.pending = false;
@@ -243,7 +264,7 @@
       lookup(data.part_number);
       el("part-number").focus();
       el("part-number").select();
-    });
+    }).catch((err) => { showNotice(err.message, "error"); syncUpdate(); });
   });
 
   el("undo-btn").addEventListener("click", () => {
@@ -255,7 +276,7 @@
       el("last-card").hidden = true;
       showNotice("Undone.", "ok");
       if (state.part) lookup(state.part.part_number);
-    });
+    }).catch((err) => showNotice(err.message, "error"));
   });
 
   // QR scanning. A label's text ends in the part number, so the last run of digits is the part.
