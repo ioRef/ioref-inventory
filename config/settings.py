@@ -27,6 +27,7 @@ env = environ.Env(
     REMOTE_USER_SUBJECT_HEADER=(str, "HTTP_PERSISTENT_ID"),
     SECURE_PROXY=(bool, False),
     STOCK_REPORT_EMAIL=(list, []),
+    LABEL_URL_HOST=(str, "ioref.org"),
     DEFAULT_FROM_EMAIL=(str, "ioref-inventory@localhost"),
     EMAIL_HOST=(str, "localhost"),
     EMAIL_PORT=(int, 25),
@@ -41,6 +42,9 @@ DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 # Comma-separated. Every recipient gets the same message.
 STOCK_REPORT_EMAIL = env("STOCK_REPORT_EMAIL")
+# The host printed in bin-label QR codes. Kept without a protocol: a QR code
+# with less text in it is easier to read on a small label.
+LABEL_URL_HOST = env("LABEL_URL_HOST")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
 EMAIL_BACKEND = env("EMAIL_BACKEND")
 EMAIL_HOST = env("EMAIL_HOST")

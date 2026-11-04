@@ -62,6 +62,7 @@
       <button type="button" class="btn" id="select-visible">Select all shown</button>
       <button type="button" class="btn" id="clear-selection">Clear selection</button>
       <button type="button" class="btn" id="clear-filters">Clear filters</button>
+      <button type="button" class="btn" id="labels-btn" disabled data-url="{% url 'admin:inventory_part_grid_labels' %}" title="Download part number, label text and URL for the selected parts, for mail merge in P-touch Editor">Export label CSV</button>
     </span>
   </div>
 
@@ -284,6 +285,7 @@
     el("selection-count").textContent = state.selected.size + " selected";
     el("preview-btn").disabled = state.selected.size === 0 || !el("bulk-field").value;
     el("apply-btn").disabled = true;
+    el("labels-btn").disabled = state.selected.size === 0;
   }
 
   function render() {
@@ -357,6 +359,34 @@
         loadUndo();
         loadHistory();
       });
+  });
+
+  el("labels-btn").addEventListener("click", () => {
+    const ids = [...state.selected];
+    if (!ids.length) return;
+    el("labels-btn").disabled = true;
+    fetch(el("labels-btn").dataset.url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() },
+      body: JSON.stringify({ ids: ids }),
+    })
+      .then((r) => {
+        if (!r.ok) {
+          return r.json().catch(() => ({})).then((data) => { throw new Error(data.error || "Could not export (HTTP " + r.status + ")."); });
+        }
+        const name = (r.headers.get("Content-Disposition") || "").match(/filename="([^"]+)"/);
+        return r.blob().then((blob) => {
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = name ? name[1] : "ioref-labels.csv";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        });
+      })
+      .catch((err) => setPreview('<p class="error-text">' + esc(err.message) + "</p>"))
+      .finally(() => { el("labels-btn").disabled = state.selected.size === 0; });
   });
 
   el("select-visible").addEventListener("click", () => { visibleRows().forEach((row) => state.selected.add(row.id)); render(); });

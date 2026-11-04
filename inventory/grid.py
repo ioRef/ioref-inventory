@@ -2,10 +2,12 @@
 
 import json
 
+from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET, require_POST
 
 from .bulk import EDITABLE, BulkEditError, apply, apply_values, plan, recent_batches, undo_last, undoable_batches
+from .export import label_csv_response
 from .models import Location, Part
 
 COLUMNS = (
@@ -114,6 +116,19 @@ def apply_edit(request):
     except BulkEditError as exc:
         return JsonResponse({"error": str(exc), "errors": exc.errors}, status=400)
     return JsonResponse({"batch": str(batch), "count": count})
+
+
+@require_POST
+def label_csv(request):
+    if _forbidden(request):
+        return JsonResponse({"error": "Not allowed."}, status=403)
+    body = _request_body(request)
+    if body is None:
+        return JsonResponse({"error": "Malformed request."}, status=400)
+    if not body["ids"]:
+        return JsonResponse({"error": "Select at least one part."}, status=400)
+    parts = Part.objects.filter(pk__in=body["ids"]).order_by("part_number")
+    return label_csv_response(parts, settings.LABEL_URL_HOST)
 
 
 @require_GET
