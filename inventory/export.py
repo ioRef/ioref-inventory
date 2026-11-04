@@ -124,3 +124,26 @@ def write_inventory_csv(stream, parts):
     writer.writerow(HEADER)
     for part in parts:
         writer.writerow([csv_safe(cell) for cell in _row(part)])
+
+
+# For mail merge into P-touch Editor, not for other institutions: three columns only.
+LABEL_HEADER = ["part_num", "label_text", "URL"]
+
+
+def label_rows(parts, host):
+    """One row per label. Blank label text falls back to the part's short name."""
+    return [
+        [part.part_number, part.label_text.strip() or part.short_name, f"{host}/{part.part_number}"]
+        for part in parts
+    ]
+
+
+def label_csv_response(parts, host):
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = (
+        f'attachment; filename="ioref-labels-{timezone.localdate():%Y-%m-%d}.csv"'
+    )
+    writer = csv.writer(response)
+    writer.writerow(LABEL_HEADER)
+    writer.writerows(label_rows(parts, host))
+    return response

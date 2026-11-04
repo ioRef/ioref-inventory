@@ -249,6 +249,7 @@ class PartAdmin(ModelAdmin):
             path("grid/data/", self.admin_site.admin_view(grid.data), name="inventory_part_grid_data"),
             path("grid/preview/", self.admin_site.admin_view(grid.preview), name="inventory_part_grid_preview"),
             path("grid/apply/", self.admin_site.admin_view(grid.apply_edit), name="inventory_part_grid_apply"),
+            path("grid/labels/", self.admin_site.admin_view(grid.label_csv), name="inventory_part_grid_labels"),
             path("grid/undo/", self.admin_site.admin_view(self.grid_undo), name="inventory_part_grid_undo"),
             path("grid/cell/", self.admin_site.admin_view(grid.cell), name="inventory_part_grid_cell"),
             path("grid/history/", self.admin_site.admin_view(grid.history), name="inventory_part_grid_history"),
